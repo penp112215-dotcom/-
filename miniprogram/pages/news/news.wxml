@@ -1,0 +1,46 @@
+<view class="page">
+  <view class="bg-grid"></view>
+  <view class="bg-glow"></view>
+
+  <view class="header">
+    <text class="title">NEWS NOW</text>
+    <view class="subtitle">全网实时投资快讯 <text class="time-badge">更新: {{updatedAt}}</text></view>
+  </view>
+
+  <scroll-view scroll-x class="tab-bar" scroll-with-animation>
+    <view 
+      class="tab-item {{activeTab === item ? 'tab-active' : ''}}" 
+      wx:for="{{tabs}}" 
+      wx:key="item"
+      bindtap="onTabSelect"
+      data-tab="{{item}}"
+    >
+      {{item}}
+    </view>
+  </scroll-view>
+
+  <scroll-view scroll-y class="list-container">
+    <view class="news-timeline">
+      
+      <view class="card-wrapper" wx:for="{{currentNews}}" wx:key="index">
+        <view class="time-node">
+          <view class="node-dot"></view>
+          <text class="node-time">{{item.time}}</text>
+        </view>
+        
+        <view class="news-card">
+          <view class="news-title">{{item.title}}</view>
+          <view class="card-footer">
+            <text class="source-tag">{{activeTab}}</text>
+            <view class="action-hint">⚡ LIVE</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="empty-tip" wx:if="{{currentNews.length === 0 && !loading}}">
+        暂无该通道实时资讯
+      </view>
+
+    </view>
+  </scroll-view>
+</view>

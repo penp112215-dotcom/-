@@ -1,0 +1,38 @@
+{
+  "pages": [
+    "pages/arbitrage/arbitrage",
+    "pages/portfolio/portfolio",
+    "pages/news/news",
+    "pages/index/index",
+    "pages/market/market",
+    "pages/logs/logs"
+  ],
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "Weixin",
+    "navigationBarBackgroundColor": "#ffffff"
+  },
+  "tabBar": {
+    "list": [
+      {
+        "pagePath": "pages/arbitrage/arbitrage",
+        "text": "A股监控"
+      },
+      {
+        "pagePath": "pages/portfolio/portfolio",
+        "text": "美股持仓"
+      },
+      {
+        "pagePath": "pages/news/news",
+        "text": "前沿资讯"
+      },
+      {
+        "pagePath": "pages/market/market",
+        "text": "市场情绪"
+      }
+    ]
+  },
+  "style": "v2",
+  "componentFramework": "glass-easel",
+  "lazyCodeLoading": "requiredComponents"
+}

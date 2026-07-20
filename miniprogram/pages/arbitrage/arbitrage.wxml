@@ -1,0 +1,70 @@
+<!--arbitrage.wxml-->
+<view class="page">
+  <view class="bg-grid"></view>
+  <view class="bg-glow bg-glow-top"></view>
+
+  <view class="header">
+    <view class="header-main">
+      <view class="header-badge">
+        <view class="pulse-dot"></view>
+        <text class="header-badge-text">ETF ARBITRAGE</text>
+      </view>
+      <text class="title">A股ETF套利监控</text>
+      <text class="subtitle">IOPV PREMIUM TRACKER</text>
+      <view wx:if="{{usingPlaceholder}}" class="demo-tag">
+        <text>DEMO DATA</text>
+      </view>
+    </view>
+    <view class="header-meta">
+      <text class="meta-label">LAST SYNC</text>
+      <text class="meta-time">{{displayUpdatedAt}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="state-box">
+    <view class="loader"></view>
+    <text class="state-text">数据同步中</text>
+  </view>
+
+  <view wx:elif="{{error}}" class="state-box state-box-error">
+    <text class="state-text">{{error}}</text>
+  </view>
+
+  <view wx:else class="card-list">
+    <view wx:for="{{items}}" wx:key="code" class="{{item.cardCls}}">
+      <view class="card-accent"></view>
+      <view class="card-body">
+        <view class="card-top">
+          <view class="name-block">
+            <text class="name">{{item.name}}</text>
+            <text class="code">{{item.code}}</text>
+          </view>
+          <text class="{{item.badgeCls}}">{{item.badgeText}}</text>
+        </view>
+
+        <view class="price-row">
+          <text class="price">{{item.priceText}}</text>
+          <view class="{{item.changeCls}}">
+            <text class="change-val">{{item.changeText}}</text>
+          </view>
+        </view>
+
+        <view class="meta-row">
+          <text class="meta-label">IOPV参考净值</text>
+          <text class="meta-value">{{item.iopvText}}</text>
+        </view>
+
+        <view class="meta-row">
+          <text class="meta-label">折溢价率</text>
+          <text class="{{item.premiumCls}}">{{item.premiumText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{isEmpty}}" class="empty-hint">
+      <text>暂无套利监控数据</text>
+    </view>
+  </view>
+
+  <view class="footer-space"></view>
+</view>

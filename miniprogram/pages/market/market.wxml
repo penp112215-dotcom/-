@@ -1,0 +1,26 @@
+<view class="page">
+  <view class="hero">
+    <text class="eyebrow">GLOBAL RISK MONITOR</text>
+    <text class="title">市场情绪</text>
+    <text class="updated">更新于 {{updatedAt}}</text>
+  </view>
+
+  <view class="sentiment-card">
+    <text class="label">CRYPTO FEAR &amp; GREED</text>
+    <view class="score-row"><text class="score">{{value}}</text><text class="score-total">/100</text></view>
+    <text class="classification">{{classification}} · {{riskLevel}}</text>
+    <text class="source">{{isLive ? '实时数据' : '演示/缓存数据'}}</text>
+  </view>
+
+  <view class="section-title">加密资产</view>
+  <block wx:if="{{loading}}">
+    <view class="empty">数据同步中…</view>
+  </block>
+  <block wx:else>
+    <view wx:for="{{assets}}" wx:key="symbol" class="asset-card">
+      <view><text class="symbol">{{item.symbol}}</text><text class="asset-name">{{item.name}}</text></view>
+      <view class="right"><text class="price">{{item.priceText}}</text><text class="{{item.changeCls}}">{{item.changeText}}</text><text class="source-small">{{item.sourceText}}</text></view>
+    </view>
+  </block>
+  <view wx:if="{{!loading && assets.length === 0}}" class="empty">暂无可用行情</view>
+</view>

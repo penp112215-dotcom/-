@@ -1,0 +1,120 @@
+<!--portfolio.wxml-->
+<view class="page">
+  <view class="bg-grid"></view>
+  <view class="bg-glow bg-glow-top"></view>
+  <view class="bg-glow bg-glow-bottom"></view>
+
+  <view class="header">
+    <view class="header-main">
+      <view class="header-badge">
+        <view class="pulse-dot"></view>
+        <text class="header-badge-text">LIVE MONITOR</text>
+      </view>
+      <text class="title">核心资产监控</text>
+      <text class="subtitle">US EQUITY · CRYPTO PERP</text>
+      <view wx:if="{{usingPlaceholder}}" class="demo-tag">
+        <text>DEMO DATA</text>
+      </view>
+    </view>
+    <view class="header-meta">
+      <text class="meta-label">LAST SYNC</text>
+      <text class="meta-time">{{displayUpdatedAt}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="state-box">
+    <view class="loader"></view>
+    <text class="state-text">数据同步中</text>
+  </view>
+
+  <view wx:elif="{{error}}" class="state-box state-box-error">
+    <text class="state-text">{{error}}</text>
+  </view>
+
+  <block wx:else>
+    <view class="section">
+      <view class="section-bar">
+        <view class="section-bar-left">
+          <view class="section-line"></view>
+          <text class="section-title">美股持仓</text>
+        </view>
+        <text class="section-tag">EQUITY</text>
+      </view>
+
+      <view class="card-list">
+        <view wx:for="{{usStocks}}" wx:key="symbol" class="{{item.cardCls}}">
+          <view class="card-accent"></view>
+          <view class="card-body">
+            <view class="card-top">
+              <view class="symbol-block">
+                <text class="symbol">{{item.symbol}}</text>
+                <text class="cn-name">{{item.cn_name}}</text>
+              </view>
+              <text class="{{item.badgeCls}}">{{item.badgeText}}</text>
+            </view>
+            <view class="card-bottom">
+              <text class="price">{{item.priceText}}</text>
+              <view class="{{item.changeCls}}">
+                <text class="change-val">{{item.changeText}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{isEmpty}}" class="empty-hint">
+        <text>暂无美股持仓数据</text>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-bar">
+        <view class="section-bar-left">
+          <view class="section-line section-line-cyan"></view>
+          <text class="section-title">加密永续合约</text>
+        </view>
+        <text class="section-tag section-tag-cyan">PERP</text>
+      </view>
+
+      <view class="{{cryptoPerp.cardCls}}">
+        <view class="card-accent card-accent-cyan"></view>
+        <view class="card-body">
+          <view class="crypto-head">
+            <view class="crypto-symbol-wrap">
+              <text class="crypto-symbol">{{cryptoPerp.symbol}}</text>
+              <text class="crypto-type">PERPETUAL</text>
+            </view>
+            <text class="{{cryptoPerp.badgeCls}}">{{cryptoPerp.badgeText}}</text>
+          </view>
+
+          <view class="crypto-price-row">
+            <text class="crypto-price">{{cryptoPerp.priceText}}</text>
+            <view class="{{cryptoPerp.changeCls}}">
+              <text class="change-val">{{cryptoPerp.changeText}}</text>
+            </view>
+          </view>
+
+          <view class="crypto-stats">
+            <view class="stat-cell">
+              <text class="stat-label">24H HIGH</text>
+              <text class="stat-value">{{cryptoPerp.highText}}</text>
+            </view>
+            <view class="stat-divider"></view>
+            <view class="stat-cell">
+              <text class="stat-label">24H LOW</text>
+              <text class="stat-value">{{cryptoPerp.lowText}}</text>
+            </view>
+            <view class="stat-divider"></view>
+            <view class="stat-cell">
+              <text class="stat-label">24H VOL</text>
+              <text class="stat-value">{{cryptoPerp.volumeText}}</text>
+              <text class="stat-unit">亿U</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="footer-space"></view>
+</view>

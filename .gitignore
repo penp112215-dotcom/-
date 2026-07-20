@@ -1,0 +1,12 @@
+# JavaScript / TypeScript dependencies
+node_modules/
+
+# Python runtime cache
+__pycache__/
+*.py[cod]
+
+# Local tool and machine-specific settings
+.claude/
+.cursor/
+project.private.config.json
+.env
