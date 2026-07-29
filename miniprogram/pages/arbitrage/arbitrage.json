@@ -1,7 +1,7 @@
 {
   "usingComponents": {},
   "enablePullDownRefresh": true,
-  "navigationBarTitleText": "A股ETF套利监控",
+  "navigationBarTitleText": "基金套利雷达",
   "navigationBarBackgroundColor": "#000000",
   "navigationBarTextStyle": "white",
   "backgroundColor": "#000000",

@@ -17,6 +17,8 @@ import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from arbitrage_engine import build_arbitrage_snapshot
+
 # ---------------------------------------------------------------------------
 # 全局配置
 # ---------------------------------------------------------------------------
@@ -25,18 +27,6 @@ REQUEST_TIMEOUT = 6  # 单源请求超时（秒），抓不到就降级
 
 def _now() -> str:
     return _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-SINA_HEADERS = {
-    "Referer": "https://finance.sina.com.cn",
-    "User-Agent": "Mozilla/5.0",
-}
-
-# 机器人相关 ETF 清单：(名称, 新浪代码, 基金代码)
-ROBOT_ETFS = [
-    ("机器人ETF", "sh562500", "562500"),
-    ("机器人ETF易方达", "sz159770", "159770"),
-    ("机器人产业ETF", "sz159551", "159551"),
-]
 
 # 美股监控标的
 US_STOCKS = [
@@ -49,12 +39,6 @@ US_STOCKS = [
 # 兜底 / 占位数据：所有外部源失败/超时时使用，绝不返回 null
 # 数值为贴近真实行情的模拟值，仅保证结构可用，source 标注 "placeholder"
 # ---------------------------------------------------------------------------
-FALLBACK_ETF = {
-    "562500": {"name": "机器人ETF华夏", "price": 1.150, "preclose": 1.140, "open": 1.142, "high": 1.158, "low": 1.138, "iopv": 1.1480, "iopv_time": "", "premium_rate": 0.17},
-    "159770": {"name": "机器人ETF易方达", "price": 1.190, "preclose": 1.180, "open": 1.182, "high": 1.198, "low": 1.178, "iopv": 1.1876, "iopv_time": "", "premium_rate": 0.20},
-    "159551": {"name": "机器人产业ETF", "price": 1.490, "preclose": 1.475, "open": 1.478, "high": 1.498, "low": 1.472, "iopv": 1.4882, "iopv_time": "", "premium_rate": 0.12},
-}
-
 FALLBACK_US = {
     "MSFT": {"name": "微软", "price": 450.25, "preclose": 444.91, "change_pct": 1.20},
     "CEG": {"name": "Constellation Energy Corp", "price": 268.50, "preclose": 266.24, "change_pct": 0.85},
@@ -98,128 +82,12 @@ def _safe_get(url: str, headers: dict | None = None, **kw) -> requests.Response 
 
 
 # ---------------------------------------------------------------------------
-# 1. A股 ETF 套利接口
+# 1. A股基金套利接口
 # ---------------------------------------------------------------------------
-def _fetch_sina_quote(codes: list[str]) -> dict[str, dict]:
-    """新浪行情：返回 {code: {name, price, preclose, open, high, low}}"""
-    url = "http://hq.sinajs.cn/list=" + ",".join(codes)
-    resp = _safe_get(url, headers=SINA_HEADERS)
-    out: dict[str, dict] = {}
-    if not resp:
-        return out
-    for line in resp.text.strip().split("\n"):
-        # var hq_str_sh562500="机器人ETF,昨收,今开,最新,最高,最低,...";
-        if "=" not in line:
-            continue
-        head, body = line.split("=", 1)
-        code = head.split("_")[-1].strip()
-        body = body.strip().strip('"').rstrip(";").strip('"')
-        if not body:
-            continue
-        f = body.split(",")
-        try:
-            out[code] = {
-                "name": f[0],
-                "open": float(f[1]),
-                "preclose": float(f[2]),
-                "price": float(f[3]),
-                "high": float(f[4]),
-                "low": float(f[5]),
-            }
-        except (IndexError, ValueError):
-            continue
-    return out
-
-
-def _fetch_fund_iopv(fund_code: str) -> dict | None:
-    """天天基金实时估值：返回 {gsz: 参考净值, gszzl: 估算涨跌幅, gztime}"""
-    url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
-    resp = _safe_get(url, headers=SINA_HEADERS)
-    if not resp:
-        return None
-    txt = resp.text.strip()
-    # jsonpgz({...});
-    start, end = txt.find("{"), txt.rfind("}")
-    if start == -1 or end == -1:
-        return None
-    try:
-        import json
-
-        data = json.loads(txt[start : end + 1])
-        return {
-            "iopv": float(data.get("gsz", 0)) or None,
-            "estimate_change_pct": float(data.get("gszzl", 0)),
-            "iopv_time": data.get("gztime", ""),
-        }
-    except (ValueError, TypeError):
-        return None
-
-
 @app.get("/api/arbitrage")
 def arbitrage() -> dict[str, Any]:
-    """A股机器人相关 ETF 盘中报价 + IOPV + 折溢价率"""
-    sina_codes = [c for _, c, _ in ROBOT_ETFS]
-    try:
-        quotes = _fetch_sina_quote(sina_codes)
-    except Exception:
-        quotes = {}
-
-    items = []
-    for name, sina_code, fund_code in ROBOT_ETFS:
-        try:
-            q = quotes.get(sina_code)
-            iopv = _fetch_fund_iopv(fund_code)
-        except Exception:
-            q, iopv = None, None
-
-        if q and q.get("price") and q["price"] > 0 and iopv and iopv.get("iopv"):
-            price = q["price"]
-            preclose = q.get("preclose") or 0
-            iopv_val = iopv["iopv"]
-            premium_rate = (price - iopv_val) / iopv_val * 100
-            change_pct = (price - preclose) / preclose * 100 if preclose else 0.0
-            source = "live"
-            item = {
-                "code": fund_code,
-                "name": q.get("name", name),
-                "price": price,
-                "preclose": preclose,
-                "open": q.get("open"),
-                "high": q.get("high"),
-                "low": q.get("low"),
-                "change_pct": round(change_pct, 4),
-                "iopv": iopv_val,
-                "iopv_time": iopv.get("iopv_time", ""),
-                "premium_rate": round(premium_rate, 4),
-                "source": source,
-            }
-        else:
-            # 降级：使用兜底数据，绝不返回 null
-            fb = FALLBACK_ETF.get(fund_code, {})
-            price = fb.get("price", 0)
-            preclose = fb.get("preclose", 0)
-            change_pct = (price - preclose) / preclose * 100 if preclose else 0.0
-            item = {
-                "code": fund_code,
-                "name": fb.get("name", name),
-                "price": price,
-                "preclose": preclose,
-                "open": fb.get("open"),
-                "high": fb.get("high"),
-                "low": fb.get("low"),
-                "change_pct": round(change_pct, 4),
-                "iopv": fb.get("iopv"),
-                "iopv_time": fb.get("iopv_time", ""),
-                "premium_rate": fb.get("premium_rate"),
-                "source": "placeholder",
-            }
-        items.append(item)
-
-    return {
-        "category": "A股ETF套利",
-        "updated_at": _now(),
-        "items": items,
-    }
+    """全市场 LOF 价差、申购状态、账户容量和净空间筛选。"""
+    return build_arbitrage_snapshot()
 
 
 # ---------------------------------------------------------------------------
