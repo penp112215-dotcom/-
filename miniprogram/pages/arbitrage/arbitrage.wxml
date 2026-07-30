@@ -1,66 +1,51 @@
 <view class="page">
   <view class="header">
     <view>
-      <text class="eyebrow">LOF ARBITRAGE SCANNER</text>
-      <text class="title">基金套利雷达</text>
-      <text class="subtitle">公开数据筛选 · 执行前以银河证券为准</text>
+      <text class="title">基金套利</text>
+      <text class="subtitle">只展示扣除成本和安全垫后的结果</text>
     </view>
-    <view class="sync">
-      <text class="sync-label">LAST SYNC</text>
-      <text class="sync-time">{{displayUpdatedAt}}</text>
+    <view class="refresh" bindtap="onRefresh">
+      <text class="refresh-icon">↻</text>
+      <text>{{displayUpdatedAt}}</text>
     </view>
   </view>
 
-  <view class="account-card">
-    <view class="account-top">
-      <text class="section-title">账户容量</text>
-      <text class="broker-tag">银河证券</text>
-    </view>
-    <view class="account-grid">
-      <view class="metric">
-        <text class="metric-value">{{account.investors}}</text>
-        <text class="metric-label">投资者</text>
+  <view class="overview">
+    <view class="overview-main">
+      <view>
+        <text class="overview-label">当前值得核实</text>
+        <view class="overview-number-line">
+          <text class="overview-number">{{summary.need_verification}}</text>
+          <text class="overview-unit">只</text>
+        </view>
       </view>
-      <view class="metric">
-        <text class="metric-value">{{account.total_channels}}</text>
-        <text class="metric-label">申购通道</text>
-      </view>
-      <view class="metric">
-        <text class="metric-value">¥{{account.cash_per_investor}}</text>
-        <text class="metric-label">每人资金</text>
-      </view>
-      <view class="metric">
-        <text class="metric-value">¥{{account.total_cash}}</text>
-        <text class="metric-label">总资金上限</text>
+      <view class="account-pill">
+        <text>{{account.investors}} 人账户</text>
+        <text>总资金 {{accountTotalText}}</text>
       </view>
     </view>
-    <text class="account-note">每人 3深A + 3深封基 + 1场外；额度按公告口径保守计算</text>
-  </view>
-
-  <view class="scan-grid">
-    <view class="scan-cell">
-      <text class="scan-value">{{summary.market_total}}</text>
-      <text class="scan-label">场内基金报价</text>
-    </view>
-    <view class="scan-cell">
-      <text class="scan-value">{{summary.analyzed}}</text>
-      <text class="scan-label">深度分析</text>
-    </view>
-    <view class="scan-cell">
-      <text class="scan-value accent">{{summary.need_verification}}</text>
-      <text class="scan-label">待核限额</text>
-    </view>
-    <view class="scan-cell">
-      <text class="scan-value">{{summary.watching}}</text>
-      <text class="scan-label">观察机会</text>
+    <view class="overview-stats">
+      <view class="overview-stat">
+        <text class="stat-value">{{summary.market_total}}</text>
+        <text class="stat-label">全市场扫描</text>
+      </view>
+      <view class="overview-stat">
+        <text class="stat-value">{{summary.analyzed}}</text>
+        <text class="stat-label">深度分析</text>
+      </view>
+      <view class="overview-stat">
+        <text class="stat-value">{{summary.watching}}</text>
+        <text class="stat-label">进入观察</text>
+      </view>
     </view>
   </view>
 
   <view class="notice" wx:if="{{message}}">
-    <text>{{message}}</text>
+    <text class="notice-dot">!</text>
+    <text class="notice-text">{{message}}</text>
   </view>
 
-  <scroll-view scroll-x class="filters">
+  <scroll-view scroll-x class="filters" enhanced show-scrollbar="{{false}}">
     <view class="filter-row">
       <view
         wx:for="{{filters}}"
@@ -72,72 +57,102 @@
     </view>
   </scroll-view>
 
+  <view class="list-head" wx:if="{{!loading && !error}}">
+    <text class="list-title">按预计净空间排序</text>
+    <text class="list-count">共 {{items.length}} 只</text>
+  </view>
+
   <view wx:if="{{loading}}" class="state">
     <view class="loader"></view>
-    <text>正在扫描全市场基金…</text>
+    <text>正在更新套利数据</text>
   </view>
 
   <view wx:elif="{{error}}" class="state state-error">
-    <text>{{error}}</text>
+    <text class="state-title">数据暂不可用</text>
+    <text class="state-desc">{{error}}</text>
+    <view class="retry" bindtap="fetch">重新加载</view>
   </view>
 
   <block wx:else>
-    <view wx:for="{{items}}" wx:key="code" class="{{item.cardCls}}">
+    <view
+      wx:for="{{items}}"
+      wx:key="code"
+      class="{{item.cardCls}}"
+      data-code="{{item.code}}"
+      bindtap="onItemTap"
+    >
       <view class="card-head">
         <view class="fund-title">
-          <text class="fund-name">{{item.name}}</text>
+          <view class="name-line">
+            <text class="fund-name">{{item.name}}</text>
+            <text class="{{item.signalCls}}">{{item.signalText}}</text>
+          </view>
           <text class="fund-code">{{item.code}} · {{item.fund_type}}</text>
         </view>
-        <text class="{{item.signalCls}}">{{item.signalText}}</text>
-      </view>
-
-      <view class="premium-row">
-        <view>
-          <text class="small-label">{{item.pricing_basis}}</text>
-          <text class="price">{{item.priceText}}</text>
-        </view>
-        <view class="premium-cell">
-          <text class="small-label">毛溢价</text>
-          <text class="premium">{{item.grossText}}</text>
-        </view>
-        <view class="premium-cell">
-          <text class="small-label">安全垫后</text>
-          <text class="net-edge">{{item.netText}}</text>
+        <view class="edge">
+          <text class="edge-label">预计净空间</text>
+          <text class="{{item.edgeCls}}">{{item.netText}}</text>
         </view>
       </view>
 
-      <view class="detail-row">
-        <text class="detail-label">{{item.nav_label}}</text>
-        <text class="detail-value">{{item.navText}} · {{item.nav_date}}</text>
-      </view>
-      <view class="detail-row">
-        <text class="detail-label">申购状态</text>
-        <text class="detail-value">{{item.subscription_status}}</text>
-      </view>
-      <view class="detail-row">
-        <text class="detail-label">每人建议申购</text>
-        <text class="detail-value">{{item.perInvestorText}}</text>
-      </view>
-      <view class="detail-row">
-        <text class="detail-label">8人理论总额</text>
-        <text class="detail-value strong">{{item.capacityText}}</text>
-      </view>
-      <view class="detail-row">
-        <text class="detail-label">预计空间金额</text>
-        <text class="detail-value profit">{{item.profitText}}</text>
+      <view class="money-grid">
+        <view class="money-cell">
+          <text class="money-value">{{item.perInvestorText}}</text>
+          <text class="money-label">每人建议申购</text>
+        </view>
+        <view class="money-cell">
+          <text class="money-value">{{item.capacityText}}</text>
+          <text class="money-label">8 人合计</text>
+        </view>
+        <view class="money-cell">
+          <text class="money-value profit">{{item.profitText}}</text>
+          <text class="money-label">预计空间金额</text>
+        </view>
       </view>
 
-      <view class="risk-box">
-        <text>限额口径：{{item.limit_scope}}</text>
-        <text>成交额：{{item.amountText}} · 最大计划量不超过成交额5% · 估值置信度：{{item.confidenceText}}</text>
-        <text>成本：申购{{item.subscription_fee_pct}}% + 卖出{{item.sell_fee_pct}}% + 滑点{{item.slippage_pct}}% + 安全垫{{item.safety_buffer_pct}}%</text>
+      <view class="quick-info">
+        <text>{{item.subscription_status}}</text>
+        <text class="quick-divider">·</text>
+        <text>估值可信度 {{item.confidenceText}}</text>
+        <text class="expand">{{item.expanded ? '收起' : '详情'}} {{item.expanded ? '⌃' : '⌄'}}</text>
+      </view>
+
+      <view class="details" wx:if="{{item.expanded}}">
+        <view class="detail-row">
+          <text class="detail-label">可执行价格</text>
+          <text class="detail-value">{{item.priceText}}（{{item.pricing_basis}}）</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">{{item.nav_label}}</text>
+          <text class="detail-value">{{item.navText}} · {{item.nav_date}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">毛溢价</text>
+          <text class="detail-value">{{item.grossText}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">限额口径</text>
+          <text class="detail-value detail-wrap">{{item.limit_scope}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">当日成交额</text>
+          <text class="detail-value">{{item.amountText}}</text>
+        </view>
+        <view class="cost-line">
+          申购 {{item.subscription_fee_pct}}% · 卖出 {{item.sell_fee_pct}}% ·
+          滑点 {{item.slippage_pct}}% · 安全垫 {{item.safety_buffer_pct}}%
+        </view>
       </view>
     </view>
 
     <view wx:if="{{items.length === 0}}" class="state">
-      <text>当前筛选项下没有基金</text>
+      <text class="state-title">当前分类暂无基金</text>
+      <text class="state-desc">下拉刷新后再看看</text>
     </view>
   </block>
 
+  <view class="disclaimer">
+    结果用于筛选，不代表确定收益。申购前请以基金公告和银河证券页面为准。
+  </view>
   <view class="footer-space"></view>
 </view>
