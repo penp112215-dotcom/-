@@ -11,6 +11,7 @@ const BASE_URL = config_1.API_BASE_URL;
 exports.API_PATH = {
     ARBITRAGE: '/api/arbitrage',
     PORTFOLIO: '/api/portfolio',
+    STOCK_SEARCH: '/api/stocks/search',
     NEWS: '/api/news',
     MARKET: '/api/market',
     BRIEFING: '/api/briefing',

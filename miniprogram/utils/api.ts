@@ -10,6 +10,7 @@ const BASE_URL = API_BASE_URL
 export const API_PATH = {
   ARBITRAGE: '/api/arbitrage',
   PORTFOLIO: '/api/portfolio',
+  STOCK_SEARCH: '/api/stocks/search',
   NEWS: '/api/news',
   MARKET: '/api/market',
   BRIEFING: '/api/briefing',

@@ -1,9 +1,9 @@
 {
   "usingComponents": {},
   "enablePullDownRefresh": true,
-  "navigationBarTitleText": "核心资产监控",
-  "navigationBarBackgroundColor": "#000000",
+  "navigationBarTitleText": "美股持仓",
+  "navigationBarBackgroundColor": "#0d1118",
   "navigationBarTextStyle": "white",
-  "backgroundColor": "#000000",
-  "backgroundTextStyle": "light"
+  "backgroundColor": "#0d1118",
+  "backgroundTextStyle": "dark"
 }

@@ -1,120 +1,224 @@
-<!--portfolio.wxml-->
 <view class="page">
-  <view class="bg-grid"></view>
-  <view class="bg-glow bg-glow-top"></view>
-  <view class="bg-glow bg-glow-bottom"></view>
-
   <view class="header">
-    <view class="header-main">
-      <view class="header-badge">
-        <view class="pulse-dot"></view>
-        <text class="header-badge-text">LIVE MONITOR</text>
-      </view>
-      <text class="title">核心资产监控</text>
-      <text class="subtitle">US EQUITY · CRYPTO PERP</text>
-      <view wx:if="{{usingPlaceholder}}" class="demo-tag">
-        <text>DEMO DATA</text>
-      </view>
+    <view>
+      <text class="eyebrow">US PORTFOLIO RADAR</text>
+      <text class="title">美股持仓雷达</text>
+      <text class="subtitle">价格目标与影响股价的最新新闻</text>
     </view>
-    <view class="header-meta">
-      <text class="meta-label">LAST SYNC</text>
-      <text class="meta-time">{{displayUpdatedAt}}</text>
+    <view class="add-button" bindtap="onToggleSearch">
+      <text class="add-icon">{{showSearch ? '×' : '+'}}</text>
+      <text>{{showSearch ? '关闭' : '添加'}}</text>
     </view>
   </view>
 
-  <view wx:if="{{loading}}" class="state-box">
+  <view class="summary">
+    <view class="summary-item">
+      <text class="summary-value">{{holdings.length}}</text>
+      <text class="summary-label">监控股票</text>
+    </view>
+    <view class="summary-divider"></view>
+    <view class="summary-item">
+      <text class="summary-value summary-alert">{{alertCount}}</text>
+      <text class="summary-label">触发目标</text>
+    </view>
+    <view class="summary-divider"></view>
+    <view class="summary-item summary-wide">
+      <text class="summary-time">{{updatedAt}}</text>
+      <text class="summary-label">{{refreshing ? '正在更新' : '最近同步'}}</text>
+    </view>
+  </view>
+
+  <view class="search-panel" wx:if="{{showSearch}}">
+    <view class="search-box">
+      <text class="search-icon">⌕</text>
+      <input
+        class="search-input"
+        value="{{searchQuery}}"
+        placeholder="输入股票代码或公司名称"
+        placeholder-class="search-placeholder"
+        confirm-type="search"
+        bindinput="onSearchInput"
+        bindconfirm="onSearchConfirm"
+        focus
+      />
+      <view class="search-action" bindtap="onSearchConfirm">搜索</view>
+    </view>
+
+    <view class="search-state" wx:if="{{searching}}">正在搜索美股…</view>
+
+    <view class="search-results" wx:else>
+      <view
+        wx:for="{{searchResults}}"
+        wx:key="symbol"
+        class="search-result"
+        data-symbol="{{item.symbol}}"
+        bindtap="onSelectSearch"
+      >
+        <view class="result-main">
+          <text class="result-symbol">{{item.symbol}}</text>
+          <text class="result-name">{{item.name}}</text>
+        </view>
+        <view class="result-right">
+          <text class="result-exchange">{{item.exchange}}</text>
+          <text class="result-add">加入</text>
+        </view>
+      </view>
+
+      <view
+        wx:if="{{searchTouched && directSymbol && searchResults.length === 0}}"
+        class="direct-add"
+        bindtap="onSelectDirect"
+      >
+        <text>找不到结果？直接按代码加入</text>
+        <text class="direct-symbol">{{directSymbol}} +</text>
+      </view>
+
+      <view
+        wx:if="{{searchTouched && !searching && !directSymbol && searchResults.length === 0}}"
+        class="search-state"
+      >没有找到美国上市股票</view>
+    </view>
+  </view>
+
+  <view wx:if="{{error}}" class="error-bar">{{error}}，下拉可重试</view>
+
+  <view wx:if="{{loading}}" class="state">
     <view class="loader"></view>
-    <text class="state-text">数据同步中</text>
-  </view>
-
-  <view wx:elif="{{error}}" class="state-box state-box-error">
-    <text class="state-text">{{error}}</text>
+    <text>正在同步持仓与新闻</text>
   </view>
 
   <block wx:else>
-    <view class="section">
-      <view class="section-bar">
-        <view class="section-bar-left">
-          <view class="section-line"></view>
-          <text class="section-title">美股持仓</text>
+    <view class="section-head" wx:if="{{stocks.length}}">
+      <text class="section-title">核心个股与异动雷达</text>
+      <text class="section-note">每 60 秒更新价格</text>
+    </view>
+
+    <view wx:for="{{stocks}}" wx:key="symbol" class="stock-card">
+      <view class="stock-head">
+        <view class="stock-identity">
+          <view class="symbol-line">
+            <text class="symbol">{{item.symbol}}</text>
+            <text class="{{item.alertCls}}">
+              <text wx:if="{{item.targetHit}}">● </text>{{item.alertText}}
+            </text>
+          </view>
+          <text class="stock-name">{{item.name}}</text>
         </view>
-        <text class="section-tag">EQUITY</text>
+        <view class="quote">
+          <text class="price">{{item.priceText}}</text>
+          <text class="{{item.changeCls}}">{{item.changeText}}</text>
+        </view>
       </view>
 
-      <view class="card-list">
-        <view wx:for="{{usStocks}}" wx:key="symbol" class="{{item.cardCls}}">
-          <view class="card-accent"></view>
-          <view class="card-body">
-            <view class="card-top">
-              <view class="symbol-block">
-                <text class="symbol">{{item.symbol}}</text>
-                <text class="cn-name">{{item.cn_name}}</text>
-              </view>
-              <text class="{{item.badgeCls}}">{{item.badgeText}}</text>
-            </view>
-            <view class="card-bottom">
-              <text class="price">{{item.priceText}}</text>
-              <view class="{{item.changeCls}}">
-                <text class="change-val">{{item.changeText}}</text>
-              </view>
+      <view class="target-row">
+        <view>
+          <text class="target-label">{{item.targetTypeText}}</text>
+          <text class="target-price">{{item.targetText}}</text>
+        </view>
+        <view class="target-actions">
+          <text class="source">{{item.sourceText}}</text>
+          <view class="text-action" data-symbol="{{item.symbol}}" catchtap="onEditTarget">修改目标</view>
+          <view class="remove-action" data-symbol="{{item.symbol}}" catchtap="onRemove">移除</view>
+        </view>
+      </view>
+
+      <view class="news-block">
+        <view class="news-head">
+          <text class="news-title">最新影响新闻</text>
+          <text class="news-count">{{item.news.length}} 条</text>
+        </view>
+
+        <view
+          wx:for="{{item.visibleNews}}"
+          wx:for-item="news"
+          wx:key="title"
+          class="news-item"
+        >
+          <view class="news-dot"></view>
+          <view class="news-content">
+            <text class="news-text">{{news.title}}</text>
+            <view class="news-meta-row">
+              <text class="news-meta">{{news.impact_label || '相关资讯'}} · </text>
+              <text
+                class="news-source-link"
+                data-url="{{news.url}}"
+                catchtap="onNewsTap"
+              >{{news.publisher}} ↗</text>
+              <text class="news-meta"> · {{news.published_at}}</text>
             </view>
           </view>
         </view>
-      </view>
 
-      <view wx:if="{{isEmpty}}" class="empty-hint">
-        <text>暂无美股持仓数据</text>
+        <view wx:if="{{item.news.length === 0}}" class="no-news">
+          近期待抓取到与 {{item.symbol}} 直接相关的新闻
+        </view>
+
+        <view
+          wx:if="{{item.hasMoreNews}}"
+          class="news-toggle"
+          data-symbol="{{item.symbol}}"
+          catchtap="onToggleNews"
+        >{{item.newsToggleText}} {{item.newsExpanded ? '⌃' : '⌄'}}</view>
       </view>
     </view>
 
-    <view class="section">
-      <view class="section-bar">
-        <view class="section-bar-left">
-          <view class="section-line section-line-cyan"></view>
-          <text class="section-title">加密永续合约</text>
-        </view>
-        <text class="section-tag section-tag-cyan">PERP</text>
-      </view>
-
-      <view class="{{cryptoPerp.cardCls}}">
-        <view class="card-accent card-accent-cyan"></view>
-        <view class="card-body">
-          <view class="crypto-head">
-            <view class="crypto-symbol-wrap">
-              <text class="crypto-symbol">{{cryptoPerp.symbol}}</text>
-              <text class="crypto-type">PERPETUAL</text>
-            </view>
-            <text class="{{cryptoPerp.badgeCls}}">{{cryptoPerp.badgeText}}</text>
-          </view>
-
-          <view class="crypto-price-row">
-            <text class="crypto-price">{{cryptoPerp.priceText}}</text>
-            <view class="{{cryptoPerp.changeCls}}">
-              <text class="change-val">{{cryptoPerp.changeText}}</text>
-            </view>
-          </view>
-
-          <view class="crypto-stats">
-            <view class="stat-cell">
-              <text class="stat-label">24H HIGH</text>
-              <text class="stat-value">{{cryptoPerp.highText}}</text>
-            </view>
-            <view class="stat-divider"></view>
-            <view class="stat-cell">
-              <text class="stat-label">24H LOW</text>
-              <text class="stat-value">{{cryptoPerp.lowText}}</text>
-            </view>
-            <view class="stat-divider"></view>
-            <view class="stat-cell">
-              <text class="stat-label">24H VOL</text>
-              <text class="stat-value">{{cryptoPerp.volumeText}}</text>
-              <text class="stat-unit">亿U</text>
-            </view>
-          </view>
-        </view>
-      </view>
+    <view wx:if="{{holdings.length === 0}}" class="empty">
+      <view class="empty-icon">＋</view>
+      <text class="empty-title">还没有监控股票</text>
+      <text class="empty-desc">搜索股票并设置加仓价或止盈价，系统会持续监控价格与新闻。</text>
+      <view class="empty-button" bindtap="onToggleSearch">添加第一只股票</view>
     </view>
   </block>
 
+  <view class="footer-note" wx:if="{{stocks.length}}">
+    新闻标题已转换为中文，仅作信息筛选；点击新闻可复制原文链接。
+  </view>
   <view class="footer-space"></view>
+
+  <view class="modal-mask" wx:if="{{showTargetModal}}" catchtouchmove="noop" bindtap="onCloseTarget">
+    <view class="target-modal" catchtap="noop">
+      <view class="modal-head">
+        <view>
+          <text class="modal-symbol">{{draftStock.symbol}}</text>
+          <text class="modal-name">{{draftStock.name}}</text>
+        </view>
+        <text class="modal-close" bindtap="onCloseTarget">×</text>
+      </view>
+
+      <text class="field-label">目标类型</text>
+      <view class="type-switch">
+        <view
+          class="type-option {{draftTargetType === 'buy' ? 'type-active' : ''}}"
+          data-type="buy"
+          bindtap="onTargetTypeTap"
+        >
+          <text>加仓价</text>
+          <text class="type-desc">价格跌到此处提醒</text>
+        </view>
+        <view
+          class="type-option {{draftTargetType === 'sell' ? 'type-active' : ''}}"
+          data-type="sell"
+          bindtap="onTargetTypeTap"
+        >
+          <text>止盈价</text>
+          <text class="type-desc">价格涨到此处提醒</text>
+        </view>
+      </view>
+
+      <text class="field-label">目标价格（美元）</text>
+      <view class="target-input-wrap">
+        <text class="currency">$</text>
+        <input
+          class="target-input"
+          type="digit"
+          value="{{draftTarget}}"
+          placeholder="0.00"
+          bindinput="onTargetInput"
+          focus
+        />
+      </view>
+
+      <view class="confirm-button" bindtap="onConfirmTarget">保存并加入监控</view>
+    </view>
+  </view>
 </view>

@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import datetime as _dt
+import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import requests
@@ -28,7 +30,7 @@ REQUEST_TIMEOUT = 6  # 单源请求超时（秒），抓不到就降级
 def _now() -> str:
     return _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-# 美股监控标的
+# 旧版默认美股监控标的；新版前端会通过 symbols 参数传入用户自选。
 US_STOCKS = [
     ("MSFT", "105.MSFT", "微软"),
     ("CEG", "105.CEG", "星座能源"),
@@ -73,7 +75,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 def _safe_get(url: str, headers: dict | None = None, **kw) -> requests.Response | None:
     try:
-        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT, **kw)
+        timeout = kw.pop("timeout", REQUEST_TIMEOUT)
+        resp = requests.get(url, headers=headers, timeout=timeout, **kw)
         if resp.status_code == 200:
             return resp
     except Exception:
@@ -112,6 +115,305 @@ def _fetch_us_stock(secid: str) -> dict | None:
         }
     except (ValueError, KeyError):
         return None
+
+
+_YAHOO_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+    )
+}
+_TRANSLATION_CACHE: dict[str, str] = {}
+_NEWS_CACHE: dict[str, tuple[_dt.datetime, list[dict]]] = {}
+_PUBLISHER_ZH = {
+    "Yahoo Finance": "雅虎财经",
+    "Reuters": "路透社",
+    "Bloomberg": "彭博社",
+    "The Motley Fool": "Motley Fool",
+    "Associated Press Finance": "美联社",
+}
+
+
+def _normalize_us_symbol(value: str) -> str:
+    """仅允许常见美股代码字符，防止把任意文本带入外部请求。"""
+    symbol = re.sub(r"[^A-Za-z0-9.\-]", "", str(value or "")).upper()
+    return symbol[:15]
+
+
+def _has_chinese(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+
+def _translate_news_title(title: str) -> str:
+    """把英文财经标题转换成中文；失败时返回空串，前端不展示英文兜底。"""
+    title = str(title or "").strip()
+    if not title:
+        return ""
+    if _has_chinese(title):
+        return title
+    cached = _TRANSLATION_CACHE.get(title)
+    if cached:
+        return cached
+    resp = _safe_get(
+        "https://translate.googleapis.com/translate_a/single",
+        headers=_YAHOO_HEADERS,
+        timeout=3,
+        params={
+            "client": "gtx",
+            "sl": "auto",
+            "tl": "zh-CN",
+            "dt": "t",
+            "q": title,
+        },
+    )
+    if not resp:
+        return ""
+    try:
+        translated = "".join(
+            str(part[0] or "")
+            for part in (resp.json()[0] or [])
+            if isinstance(part, list) and part
+        ).strip()
+    except (ValueError, KeyError, IndexError, TypeError):
+        return ""
+    if not _has_chinese(translated):
+        return ""
+    if len(_TRANSLATION_CACHE) >= 1000:
+        _TRANSLATION_CACHE.clear()
+    _TRANSLATION_CACHE[title] = translated
+    return translated
+
+
+def _translate_news_titles(titles: list[str]) -> list[str]:
+    """一只股票的新闻批量翻译，减少外部请求次数和首屏等待。"""
+    results = [""] * len(titles)
+    missing_indexes: list[int] = []
+    missing_titles: list[str] = []
+    for index, title in enumerate(titles):
+        clean = str(title or "").strip()
+        if _has_chinese(clean):
+            results[index] = clean
+        elif _TRANSLATION_CACHE.get(clean):
+            results[index] = _TRANSLATION_CACHE[clean]
+        elif clean:
+            missing_indexes.append(index)
+            missing_titles.append(clean)
+
+    if not missing_titles:
+        return results
+
+    marker = "\n998877665544332211\n"
+    resp = _safe_get(
+        "https://translate.googleapis.com/translate_a/single",
+        headers=_YAHOO_HEADERS,
+        timeout=8,
+        params={
+            "client": "gtx",
+            "sl": "auto",
+            "tl": "zh-CN",
+            "dt": "t",
+            "q": marker.join(missing_titles),
+        },
+    )
+    translated_parts: list[str] = []
+    if resp:
+        try:
+            translated_text = "".join(
+                str(part[0] or "")
+                for part in (resp.json()[0] or [])
+                if isinstance(part, list) and part
+            )
+            translated_parts = [
+                part.strip() for part in translated_text.split(marker.strip())
+            ]
+        except (ValueError, KeyError, IndexError, TypeError):
+            translated_parts = []
+
+    if len(translated_parts) != len(missing_titles):
+        translated_parts = [_translate_news_title(title) for title in missing_titles]
+
+    for index, original, translated in zip(
+        missing_indexes, missing_titles, translated_parts
+    ):
+        if _has_chinese(translated):
+            results[index] = translated
+            _TRANSLATION_CACHE[original] = translated
+    if len(_TRANSLATION_CACHE) >= 1000:
+        _TRANSLATION_CACHE.clear()
+    return results
+
+
+def _fetch_yahoo_quote(symbol: str) -> dict | None:
+    """Yahoo Finance chart 行情，无需 API 密钥。"""
+    resp = _safe_get(
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+        headers=_YAHOO_HEADERS,
+        params={"range": "5d", "interval": "1d"},
+    )
+    if not resp:
+        return None
+    try:
+        result = (resp.json().get("chart", {}).get("result") or [])[0]
+        meta = result.get("meta") or {}
+        price = meta.get("regularMarketPrice")
+        preclose = meta.get("chartPreviousClose") or meta.get("previousClose")
+        if price is None:
+            return None
+        change_pct = None
+        if preclose not in (None, 0):
+            change_pct = round((float(price) / float(preclose) - 1) * 100, 3)
+        return {
+            "symbol": symbol,
+            "name": meta.get("longName") or meta.get("shortName") or symbol,
+            "price": round(float(price), 4),
+            "preclose": round(float(preclose), 4) if preclose is not None else None,
+            "change_pct": change_pct,
+            "currency": meta.get("currency") or "USD",
+            "exchange": meta.get("exchangeName") or meta.get("fullExchangeName") or "",
+            "market_time": meta.get("regularMarketTime"),
+            "source": "yahoo",
+        }
+    except (ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
+def _fetch_yahoo_news(symbol: str, limit: int = 10) -> list[dict]:
+    """按股票代码获取关联新闻，失败时返回空数组而非演示新闻。"""
+    cached = _NEWS_CACHE.get(symbol)
+    if cached and (_dt.datetime.now() - cached[0]).total_seconds() < 600:
+        return cached[1][:limit]
+    resp = _safe_get(
+        "https://query2.finance.yahoo.com/v1/finance/search",
+        headers=_YAHOO_HEADERS,
+        params={
+            "q": symbol,
+            "quotesCount": 1,
+            "newsCount": max(limit * 2, 6),
+            "enableFuzzyQuery": "false",
+        },
+    )
+    if not resp:
+        return []
+    try:
+        rows = resp.json().get("news") or []
+    except ValueError:
+        return []
+
+    candidates: list[tuple[dict, list[str], str]] = []
+    for row in rows:
+        related = [str(item).upper() for item in (row.get("relatedTickers") or [])]
+        if related and symbol not in related:
+            continue
+        original_title = str(row.get("title") or "").strip()
+        if not original_title:
+            continue
+        candidates.append((row, related, original_title))
+        if len(candidates) >= limit:
+            break
+
+    translated_titles = _translate_news_titles(
+        [candidate[2] for candidate in candidates]
+    )
+    result: list[dict] = []
+    for (row, related, original_title), title in zip(
+        candidates, translated_titles
+    ):
+        if not title:
+            continue
+        published = row.get("providerPublishTime")
+        try:
+            published_text = _dt.datetime.fromtimestamp(int(published)).strftime("%m-%d %H:%M")
+        except (TypeError, ValueError, OSError):
+            published_text = ""
+        publisher = str(row.get("publisher") or "Yahoo Finance")
+        direct = len(related) == 1 or symbol in original_title.upper()
+        result.append(
+            {
+                "title": title,
+                "original_title": original_title,
+                "publisher": _PUBLISHER_ZH.get(publisher, publisher),
+                "published_at": published_text,
+                "url": str(row.get("link") or ""),
+                "impact_label": "直接相关" if direct else "行业关联",
+            }
+        )
+    _NEWS_CACHE[symbol] = (_dt.datetime.now(), result)
+    return result
+
+
+def _search_us_stocks(query: str) -> list[dict]:
+    query = str(query or "").strip()[:50]
+    if not query:
+        return []
+    resp = _safe_get(
+        "https://query2.finance.yahoo.com/v1/finance/search",
+        headers=_YAHOO_HEADERS,
+        params={
+            "q": query,
+            "quotesCount": 12,
+            "newsCount": 0,
+            "enableFuzzyQuery": "true",
+        },
+    )
+    if not resp:
+        return []
+    try:
+        quotes = resp.json().get("quotes") or []
+    except ValueError:
+        return []
+
+    results: list[dict] = []
+    seen: set[str] = set()
+    allowed_types = {"EQUITY"}
+    allowed_exchanges = {"NMS", "NGM", "NCM", "NYQ", "ASE", "PCX", "PNK"}
+    for row in quotes:
+        symbol = _normalize_us_symbol(row.get("symbol") or "")
+        quote_type = str(row.get("quoteType") or "").upper()
+        exchange = str(row.get("exchange") or "").upper()
+        if (
+            not symbol
+            or symbol in seen
+            or quote_type not in allowed_types
+            or (exchange and exchange not in allowed_exchanges)
+        ):
+            continue
+        seen.add(symbol)
+        results.append(
+            {
+                "symbol": symbol,
+                "name": str(
+                    row.get("longname")
+                    or row.get("shortname")
+                    or row.get("longName")
+                    or row.get("shortName")
+                    or symbol
+                ),
+                "exchange": exchange,
+                "type": "美股",
+            }
+        )
+        if len(results) >= 8:
+            break
+    return results
+
+
+def _build_portfolio_stock(symbol: str) -> dict:
+    quote = _fetch_yahoo_quote(symbol)
+    news = _fetch_yahoo_news(symbol)
+    if quote:
+        quote["news"] = news
+        return quote
+    return {
+        "symbol": symbol,
+        "name": symbol,
+        "price": None,
+        "preclose": None,
+        "change_pct": None,
+        "currency": "USD",
+        "exchange": "",
+        "source": "unavailable",
+        "news": news,
+    }
 
 
 def _fetch_crypto_ticker(symbol: str) -> dict | None:
@@ -166,41 +468,40 @@ def _fetch_fear_greed() -> dict:
         return {**FALLBACK_FEAR_GREED, "source": "placeholder"}
 
 
-@app.get("/api/portfolio")
-def portfolio() -> dict[str, Any]:
-    """核心资产监控：美股最新价/涨跌幅 + SOL 永续合约 24h 波动"""
-    stocks = []
-    for symbol, secid, cn_name in US_STOCKS:
-        try:
-            s = _fetch_us_stock(secid)
-        except Exception:
-            s = None
-        if s and s.get("price") is not None:
-            s.update({"symbol": symbol, "cn_name": cn_name, "source": "live"})
-        else:
-            # 降级：使用兜底数据，绝不返回 null
-            fb = FALLBACK_US.get(symbol, {})
-            s = {
-                "symbol": symbol,
-                "cn_name": cn_name,
-                "name": fb.get("name", cn_name),
-                "price": fb.get("price"),
-                "preclose": fb.get("preclose"),
-                "change_pct": fb.get("change_pct"),
-                "source": "placeholder",
-            }
-        stocks.append(s)
-
-    crypto_assets = _crypto_assets()
-    # 向后兼容旧版前端：保留 crypto_perp 作为 SOL 的别名。
-    perp = next(asset for asset in crypto_assets if asset["symbol"] == "SOLUSDT")
-
+@app.get("/api/stocks/search")
+def search_stocks(q: str = "") -> dict[str, Any]:
+    """搜索可加入自选的美国上市股票。"""
     return {
-        "category": "核心资产监控",
+        "status": "success",
+        "query": str(q or "").strip(),
+        "items": _search_us_stocks(q),
+    }
+
+
+@app.get("/api/portfolio")
+def portfolio(symbols: str = "") -> dict[str, Any]:
+    """按用户自选代码返回美股行情和每只股票的最新关联新闻。"""
+    requested: list[str] = []
+    seen: set[str] = set()
+    raw_symbols = symbols.split(",") if symbols else [item[0] for item in US_STOCKS]
+    for raw in raw_symbols:
+        symbol = _normalize_us_symbol(raw)
+        if symbol and symbol not in seen:
+            seen.add(symbol)
+            requested.append(symbol)
+        if len(requested) >= 20:
+            break
+
+    if requested:
+        workers = min(8, len(requested))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            stocks = list(pool.map(_build_portfolio_stock, requested))
+    else:
+        stocks = []
+    return {
+        "category": "美股持仓监控",
         "updated_at": _now(),
         "us_stocks": stocks,
-        "crypto_perp": perp,
-        "crypto_assets": crypto_assets,
     }
 
 
@@ -286,6 +587,8 @@ def root() -> dict[str, Any]:
         "endpoints": [
             "/api/arbitrage",
             "/api/portfolio",
+            "/api/stocks/search",
+            "/api/market",
             "/api/news",
         ],
     }
