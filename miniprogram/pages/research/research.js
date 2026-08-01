@@ -92,6 +92,7 @@ Page({
         ai: EMPTY_AI,
         query: '',
         searching: false,
+        searchMessage: '输入股票名称或代码，停止输入后会自动搜索',
         searchItems: [],
         asset: null,
         dossier: null,
@@ -103,6 +104,7 @@ Page({
         activeTask: null,
     },
     _taskTimer: 0,
+    _searchTimer: 0,
     onLoad() {
         this.loadOverview();
         this.loadNotes();
@@ -111,6 +113,9 @@ Page({
         const timer = this._taskTimer;
         if (timer)
             clearInterval(timer);
+        const searchTimer = this._searchTimer;
+        if (searchTimer)
+            clearTimeout(searchTimer);
     },
     onPullDownRefresh() {
         Promise.all([this.loadOverview(), this.loadNotes()])
@@ -133,7 +138,17 @@ Page({
         });
     },
     onQueryInput(e) {
-        this.setData({ query: String(e.detail.value || '') });
+        const query = String(e.detail.value || '').trim();
+        this.setData({
+            query,
+            searchMessage: query ? '等待搜索…' : '输入股票名称或代码，停止输入后会自动搜索',
+        });
+        const oldTimer = this._searchTimer;
+        if (oldTimer)
+            clearTimeout(oldTimer);
+        if (query.length < 2)
+            return;
+        this._searchTimer = setTimeout(() => this.performSearch(query), 450);
     },
     onSearch() {
         const query = this.data.query.trim();
@@ -141,17 +156,49 @@ Page({
             wx.showToast({ title: '请输入股票名称或代码', icon: 'none' });
             return;
         }
-        this.setData({ searching: true, searchItems: [], asset: null, dossier: null });
+        this.performSearch(query);
+    },
+    performSearch(query) {
+        if (!query || this.data.searching)
+            return;
+        this.setData({
+            searching: true,
+            searchMessage: '正在搜索…',
+            searchItems: [],
+            asset: null,
+            dossier: null,
+        });
         (0, api_1.request)(api_1.API_PATH.RESEARCH_SEARCH, {
             data: { q: query },
             timeout: 15000,
         })
-            .then((res) => this.setData({ searchItems: res.items || [] }))
-            .catch(() => wx.showToast({ title: '搜索暂不可用', icon: 'none' }))
+            .then((res) => {
+            const items = (res.items || []);
+            if (!items.length) {
+                this.setData({ searchItems: [], searchMessage: '没有找到匹配的股票，请换名称或代码' });
+                return;
+            }
+            const normalized = query.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const exact = items.find((item) => item.symbol.toUpperCase() === normalized);
+            this.setData({
+                searchItems: exact ? [] : items,
+                searchMessage: exact ? `已找到 ${exact.name}，正在读取详情…` : `找到 ${items.length} 个结果，请选择`,
+            });
+            if (exact)
+                this.selectAsset(exact.quote_code);
+        })
+            .catch((error) => {
+            console.error('[投研搜索失败]', error);
+            this.setData({ searchMessage: '无法连接本地服务，请确认后端已启动，并关闭合法域名校验' });
+            wx.showToast({ title: '搜索连接失败', icon: 'none' });
+        })
             .finally(() => this.setData({ searching: false }));
     },
     onSelectAsset(e) {
         const quoteCode = String((e.currentTarget.dataset || {}).quoteCode || '');
+        this.selectAsset(quoteCode);
+    },
+    selectAsset(quoteCode) {
         if (!quoteCode)
             return;
         wx.showLoading({ title: '读取数据' });
@@ -162,10 +209,18 @@ Page({
             .then((asset) => {
             if (asset.status !== 'success')
                 throw new Error('unavailable');
-            this.setData({ asset: displayAsset(asset), searchItems: [] });
+            this.setData({
+                asset: displayAsset(asset),
+                searchItems: [],
+                searchMessage: `已载入 ${asset.name}`,
+            });
             this.loadDossier(quoteCode);
         })
-            .catch(() => wx.showToast({ title: '个股数据暂不可用', icon: 'none' }))
+            .catch((error) => {
+            console.error('[个股详情失败]', error);
+            this.setData({ searchMessage: '已找到股票，但详情读取失败，请稍后重试' });
+            wx.showToast({ title: '个股数据暂不可用', icon: 'none' });
+        })
             .finally(() => wx.hideLoading());
     },
     loadDossier(quoteCode) {

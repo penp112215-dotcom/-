@@ -152,6 +152,8 @@ page {
   line-height: 76rpx;
   text-align: center;
 }
+.search-message { display: block; min-height: 30rpx; margin: 9rpx 5rpx 0; color: #8e98a8; font-size: 17rpx; line-height: 1.45; }
+.search-message-active { color: #2d6de7; }
 
 .search-results {
   margin-top: 10rpx;

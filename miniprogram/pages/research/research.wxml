@@ -65,6 +65,7 @@
     />
     <view class="search-button" bindtap="onSearch">{{searching ? '搜索中' : '搜索'}}</view>
   </view>
+  <text class="search-message {{searching ? 'search-message-active' : ''}}">{{searchMessage}}</text>
 
   <view class="search-results" wx:if="{{searchItems.length}}">
     <view
