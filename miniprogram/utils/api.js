@@ -18,6 +18,7 @@ exports.API_PATH = {
     RESEARCH_OVERVIEW: '/api/research/overview',
     RESEARCH_SEARCH: '/api/research/search',
     RESEARCH_ASSET: '/api/research/asset',
+    RESEARCH_DOSSIER: '/api/research/dossier',
     RESEARCH_NOTES: '/api/research/notes',
     RESEARCH_TASKS: '/api/research/tasks',
 };

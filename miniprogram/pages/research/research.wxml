@@ -105,6 +105,99 @@
     </view>
   </view>
 
+  <view class="dossier-loading" wx:if="{{dossierLoading}}">正在整理财务、公告、研报和资金数据…</view>
+
+  <view class="dossier" wx:if="{{dossier}}">
+    <view class="dossier-summary">
+      <view>
+        <text class="dossier-title">客观研究底稿</text>
+        <text class="dossier-scope">{{dossier.market_scope}} · {{dossier.updated_at}}</text>
+      </view>
+      <text class="dossier-count">{{dossier.completeness.available}}/{{dossier.completeness.total}}</text>
+    </view>
+
+    <view class="data-section" wx:if="{{dossier.valuation.available}}">
+      <view class="data-section-head">
+        <view>
+          <text class="data-title">估值概览</text>
+          <text class="data-subtitle">当前估值与机构一致预期</text>
+        </view>
+        <text class="source-action" wx:if="{{dossier.valuation.source_url}}" data-url="{{dossier.valuation.source_url}}" bindtap="onOpenSource">来源</text>
+      </view>
+      <view class="flow-grid">
+        <view class="flow-item"><text class="flow-value">{{dossier.valuation.peText}}</text><text class="flow-label">当前 PE</text></view>
+        <view class="flow-item"><text class="flow-value">{{dossier.valuation.pbText}}</text><text class="flow-label">当前 PB</text></view>
+        <view class="flow-item"><text class="flow-value">{{dossier.valuation.forwardPeText}}</text><text class="flow-label">机构预测 PE</text></view>
+      </view>
+      <text class="valuation-tip">{{dossier.valuation.report_count}} 份研报参与统计 · {{dossier.valuation.message}}</text>
+    </view>
+
+    <view class="data-section" wx:if="{{dossier.financials.available}}">
+      <view class="data-section-head">
+        <view>
+          <text class="data-title">财务摘要</text>
+          <text class="data-subtitle">{{dossier.financials.period}}</text>
+        </view>
+        <text class="source-action" data-url="{{dossier.financials.source_url}}" bindtap="onOpenSource">来源</text>
+      </view>
+      <view class="financial-grid">
+        <view class="financial-item"><text class="financial-value">{{dossier.financials.revenueText}}</text><text class="financial-label">营业收入</text><text class="financial-yoy">同比 {{dossier.financials.revenueYoyText}}</text></view>
+        <view class="financial-item"><text class="financial-value">{{dossier.financials.netProfitText}}</text><text class="financial-label">归母净利润</text><text class="financial-yoy">同比 {{dossier.financials.netProfitYoyText}}</text></view>
+        <view class="financial-item"><text class="financial-value">{{dossier.financials.roeText}}</text><text class="financial-label">ROE</text></view>
+        <view class="financial-item"><text class="financial-value">{{dossier.financials.grossMarginText}}</text><text class="financial-label">毛利率</text></view>
+        <view class="financial-item"><text class="financial-value">{{dossier.financials.netMarginText}}</text><text class="financial-label">净利率</text></view>
+        <view class="financial-item"><text class="financial-value">{{dossier.financials.debtRatioText}}</text><text class="financial-label">资产负债率</text></view>
+      </view>
+    </view>
+
+    <view class="data-section" wx:if="{{dossier.fund_flow.available}}">
+      <view class="data-section-head">
+        <view>
+          <text class="data-title">资金面</text>
+          <text class="data-subtitle">{{dossier.fund_flow.date}}</text>
+        </view>
+        <text class="source-action" data-url="{{dossier.fund_flow.source_url}}" bindtap="onOpenSource">来源</text>
+      </view>
+      <view class="flow-grid">
+        <view class="flow-item"><text class="{{dossier.fund_flow.mainNetCls}}">{{dossier.fund_flow.mainNetText}}</text><text class="flow-label">主力净额</text></view>
+        <view class="flow-item"><text class="flow-value">{{dossier.fund_flow.largeNetText}}</text><text class="flow-label">大单净额</text></view>
+        <view class="flow-item"><text class="flow-value">{{dossier.fund_flow.superLargeNetText}}</text><text class="flow-label">超大单净额</text></view>
+      </view>
+    </view>
+
+    <view class="data-section" wx:if="{{dossier.announcements.available}}">
+      <view class="data-section-head">
+        <text class="data-title">最新公告</text>
+        <text class="source-action" data-url="{{dossier.announcements.source_url}}" bindtap="onOpenSource">全部公告</text>
+      </view>
+      <view class="document-row" wx:for="{{dossier.announcements.items}}" wx:key="url" data-url="{{item.url}}" bindtap="onOpenSource">
+        <view class="document-main">
+          <text class="document-title">{{item.title}}</text>
+          <text class="document-meta">{{item.date}} · {{item.type}}</text>
+        </view>
+        <text class="document-link">原文</text>
+      </view>
+    </view>
+
+    <view class="data-section" wx:if="{{dossier.reports.available}}">
+      <view class="data-section-head">
+        <text class="data-title">机构研报</text>
+        <text class="source-action" data-url="{{dossier.reports.source_url}}" bindtap="onOpenSource">全部研报</text>
+      </view>
+      <view class="document-row" wx:for="{{dossier.reports.items}}" wx:key="url" data-url="{{item.url}}" bindtap="onOpenSource">
+        <view class="document-main">
+          <text class="document-title">{{item.title}}</text>
+          <text class="document-meta">{{item.date}} · {{item.organization}} · {{item.rating || '未评级'}}</text>
+        </view>
+        <text class="document-link">原文</text>
+      </view>
+    </view>
+
+    <view class="missing-data" wx:if="{{dossier.completeness.available < dossier.completeness.total}}">
+      缺失项目会在AI分析中标记为“数据不足”，不会推测补全。
+    </view>
+  </view>
+
   <view class="task-card" wx:if="{{activeTask}}">
     <view class="task-head">
       <text class="task-title">{{activeTask.title}}</text>

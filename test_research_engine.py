@@ -39,6 +39,42 @@ class ResearchEngineTest(unittest.TestCase):
         result = research_engine.fetch_asset_snapshot("../../secret")
         self.assertEqual(result["status"], "invalid")
 
+    def test_invalid_dossier_code_is_rejected_before_network_request(self):
+        result = research_engine.fetch_research_dossier("../../secret")
+        self.assertEqual(result["status"], "invalid")
+
+    def test_dossier_combines_sections_and_valuation(self):
+        snapshot = {
+            "status": "success",
+            "name": "测试股份",
+            "pe": 20.0,
+            "pb": 2.5,
+            "source": "测试行情",
+        }
+        financials = {"available": True, "latest": {"revenue": 1}}
+        announcements = {"available": True, "items": [{"title": "公告"}]}
+        reports = {
+            "available": True,
+            "source_url": "https://example.com/reports",
+            "items": [
+                {"forecast_pe": 18.0, "rating": "买入"},
+                {"forecast_pe": 22.0, "rating": "增持"},
+            ],
+        }
+        fund_flow = {"available": True, "latest": {"main_net": 100}}
+        with (
+            patch.object(research_engine, "fetch_asset_snapshot", return_value=snapshot),
+            patch.object(research_engine, "_fetch_financials", return_value=financials),
+            patch.object(research_engine, "_fetch_announcements", return_value=announcements),
+            patch.object(research_engine, "_fetch_reports", return_value=reports),
+            patch.object(research_engine, "_fetch_fund_flow", return_value=fund_flow),
+        ):
+            result = research_engine.fetch_research_dossier("1.600519", force=True)
+
+        self.assertEqual(result["completeness"]["available"], 6)
+        self.assertEqual(result["valuation"]["forward_pe"], 20.0)
+        self.assertEqual(result["valuation"]["ratings"], {"买入": 1, "增持": 1})
+
 
 if __name__ == "__main__":
     unittest.main()

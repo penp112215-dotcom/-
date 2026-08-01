@@ -26,6 +26,7 @@ from research_engine import (
     create_research_task,
     delete_note,
     fetch_asset_snapshot,
+    fetch_research_dossier,
     get_research_overview,
     get_research_task,
     list_notes,
@@ -146,6 +147,11 @@ def research_asset(quote_code: str) -> dict[str, Any]:
     return fetch_asset_snapshot(quote_code)
 
 
+@app.get("/api/research/dossier")
+def research_dossier(quote_code: str, force: bool = False) -> dict[str, Any]:
+    return fetch_research_dossier(quote_code, force)
+
+
 @app.get("/api/research/notes")
 def research_notes(limit: int = 30) -> dict[str, Any]:
     return {"items": list_notes(limit)}
@@ -170,12 +176,16 @@ def research_tasks(limit: int = 20) -> dict[str, Any]:
 
 @app.post("/api/research/tasks")
 def research_task_create(body: ResearchTaskInput) -> dict[str, Any]:
+    context = body.context
+    quote_code = str(context.get("quote_code") or "")
+    if quote_code:
+        context = {"dossier": fetch_research_dossier(quote_code)}
     return create_research_task(
         body.task_type,
         body.title,
         body.prompt,
         body.symbol,
-        body.context,
+        context,
     )
 
 
@@ -685,6 +695,7 @@ def root() -> dict[str, Any]:
             "/api/research/overview",
             "/api/research/search?q=",
             "/api/research/asset?quote_code=",
+            "/api/research/dossier?quote_code=",
             "/api/research/notes",
             "/api/research/tasks",
             "/api/portfolio",

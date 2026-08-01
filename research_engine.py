@@ -14,6 +14,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,8 @@ TENCENT_INDEX_SYMBOLS = (
 _db_lock = threading.Lock()
 _worker_started = False
 _worker_lock = threading.Lock()
+_dossier_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_dossier_cache_lock = threading.Lock()
 
 
 def _now() -> str:
@@ -124,6 +127,32 @@ def _request_json(
             return response.json()
     except (requests.RequestException, ValueError):
         pass
+    return None
+
+
+def _domestic_json(
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    timeout: int = REQUEST_TIMEOUT,
+) -> dict | None:
+    """国内财经站优先直连，避免系统代理导致 CONNECT 被中断。"""
+    for direct in (True, False):
+        session = requests.Session()
+        session.trust_env = not direct
+        try:
+            response = session.get(
+                url,
+                params=params,
+                headers=HEADERS,
+                timeout=timeout,
+            )
+            if response.status_code == 200:
+                return response.json()
+        except (requests.RequestException, ValueError):
+            pass
+        finally:
+            session.close()
     return None
 
 
@@ -342,6 +371,312 @@ def _fetch_tencent_asset(quote_code: str) -> dict[str, Any]:
         "market": "A股" if prefix in {"sh", "sz"} else "港股" if prefix == "hk" else "美股",
         "source": "腾讯公开行情（备用）",
     }
+
+
+def _a_secu_code(quote_code: str) -> tuple[str, str] | None:
+    market_id, code = quote_code.split(".", 1)
+    if market_id == "1" and re.fullmatch(r"\d{6}", code):
+        return code, f"{code}.SH"
+    if market_id == "0" and re.fullmatch(r"\d{6}", code):
+        return code, f"{code}.SZ"
+    return None
+
+
+def _fetch_financials(code: str, secu_code: str) -> dict[str, Any]:
+    payload = _domestic_json(
+        "https://datacenter.eastmoney.com/securities/api/data/v1/get",
+        params={
+            "reportName": "RPT_F10_FINANCE_MAINFINADATA",
+            "columns": "ALL",
+            "filter": f'(SECUCODE="{secu_code}")',
+            "pageNumber": 1,
+            "pageSize": 5,
+            "sortTypes": -1,
+            "sortColumns": "REPORT_DATE",
+        },
+        timeout=15,
+    )
+    rows = ((payload or {}).get("result") or {}).get("data") or []
+    history = []
+    for raw in rows:
+        history.append(
+            {
+                "period": str(raw.get("REPORT_DATE_NAME") or raw.get("REPORT_DATE") or "")[:16],
+                "report_type": str(raw.get("REPORT_TYPE") or ""),
+                "revenue": _number(raw.get("TOTALOPERATEREVE")),
+                "revenue_yoy": _number(raw.get("TOTALOPERATEREVETZ")),
+                "net_profit": _number(raw.get("PARENTNETPROFIT")),
+                "net_profit_yoy": _number(raw.get("PARENTNETPROFITTZ")),
+                "eps": _number(raw.get("EPSJB")),
+                "bvps": _number(raw.get("BPS")),
+                "roe": _number(raw.get("ROEJQ")),
+                "gross_margin": _number(raw.get("XSMLL")),
+                "net_margin": _number(raw.get("XSJLL")),
+                "debt_ratio": _number(raw.get("ZCFZL")),
+                "operating_cashflow_per_share": _number(raw.get("MGJYXJJE")),
+            }
+        )
+    return {
+        "available": bool(history),
+        "latest": history[0] if history else {},
+        "history": history,
+        "source_name": "东方财富财务摘要",
+        "source_url": f"https://emweb.securities.eastmoney.com/PC_HSF10/FinanceAnalysis/Index?type=web&code={secu_code}",
+    }
+
+
+def _fetch_announcements(code: str) -> dict[str, Any]:
+    payload = _domestic_json(
+        "https://np-anotice-stock.eastmoney.com/api/security/ann",
+        params={
+            "sr": -1,
+            "page_size": 10,
+            "page_index": 1,
+            "ann_type": "A",
+            "client_source": "web",
+            "stock_list": code,
+            "f_node": 0,
+            "s_node": 0,
+        },
+        timeout=15,
+    )
+    rows = ((payload or {}).get("data") or {}).get("list") or []
+    items = []
+    for raw in rows:
+        art_code = str(raw.get("art_code") or "")
+        columns = [
+            str(column.get("column_name") or "")
+            for column in raw.get("columns") or []
+            if column.get("column_name")
+        ]
+        items.append(
+            {
+                "title": str(raw.get("title_ch") or raw.get("title") or ""),
+                "date": str(raw.get("notice_date") or "")[:10],
+                "type": columns[0] if columns else "公告",
+                "url": (
+                    f"https://data.eastmoney.com/notices/detail/{code}/{art_code}.html"
+                    if art_code
+                    else ""
+                ),
+            }
+        )
+    return {
+        "available": bool(items),
+        "items": items,
+        "source_name": "东方财富公告",
+        "source_url": f"https://data.eastmoney.com/notices/stock/{code}.html",
+    }
+
+
+def _fetch_reports(code: str) -> dict[str, Any]:
+    today = dt.date.today()
+    payload = _domestic_json(
+        "https://reportapi.eastmoney.com/report/list",
+        params={
+            "pageSize": 10,
+            "pageNo": 1,
+            "qType": 0,
+            "code": code,
+            "beginTime": str(today - dt.timedelta(days=730)),
+            "endTime": str(today),
+        },
+        timeout=15,
+    )
+    rows = (payload or {}).get("data") or []
+    items = []
+    for raw in rows:
+        info_code = str(raw.get("infoCode") or "")
+        items.append(
+            {
+                "title": str(raw.get("title") or ""),
+                "date": str(raw.get("publishDate") or "")[:10],
+                "organization": str(raw.get("orgSName") or raw.get("orgName") or ""),
+                "researcher": str(raw.get("researcher") or ""),
+                "rating": str(raw.get("emRatingName") or raw.get("sRatingName") or ""),
+                "target_price_low": _number(raw.get("indvAimPriceL")),
+                "target_price_high": _number(raw.get("indvAimPriceT")),
+                "forecast_pe": _number(raw.get("predictThisYearPe")),
+                "forecast_eps": _number(raw.get("predictThisYearEps")),
+                "url": (
+                    f"https://data.eastmoney.com/report/info/{info_code}.html"
+                    if info_code
+                    else ""
+                ),
+            }
+        )
+    return {
+        "available": bool(items),
+        "items": items,
+        "source_name": "东方财富机构研报",
+        "source_url": f"https://data.eastmoney.com/report/{code}.html",
+    }
+
+
+def _fetch_fund_flow(quote_code: str) -> dict[str, Any]:
+    payload = _domestic_json(
+        "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get",
+        params={
+            "lmt": 10,
+            "klt": 101,
+            "secid": quote_code,
+            "fields1": "f1,f2,f3,f7",
+            "fields2": "f51,f52,f53,f54,f55,f56",
+        },
+        timeout=12,
+    )
+    data = (payload or {}).get("data") or {}
+    history = []
+    for line in data.get("klines") or []:
+        fields = str(line).split(",")
+        if len(fields) < 6:
+            continue
+        history.append(
+            {
+                "date": fields[0],
+                "main_net": _number(fields[1]),
+                "small_net": _number(fields[2]),
+                "medium_net": _number(fields[3]),
+                "large_net": _number(fields[4]),
+                "super_large_net": _number(fields[5]),
+            }
+        )
+    recent = history[-1] if history else {}
+    source_name = "东方财富资金流向"
+    source_url = f"https://data.eastmoney.com/zjlx/{quote_code.split('.', 1)[1]}.html"
+    if not history:
+        market, code = quote_code.split(".", 1)
+        symbol = ("sh" if market == "1" else "sz") + code
+        payload = _domestic_json(
+            "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/MoneyFlow.ssl_qsfx_zjlrqs",
+            params={
+                "page": 1,
+                "num": 10,
+                "sort": "opendate",
+                "asc": 0,
+                "daima": symbol,
+            },
+            timeout=15,
+        )
+        rows = payload if isinstance(payload, list) else []
+        for raw in reversed(rows):
+            main_net = _number(raw.get("netamount"))
+            super_large_net = _number(raw.get("r0_net"))
+            history.append(
+                {
+                    "date": str(raw.get("opendate") or ""),
+                    "main_net": main_net,
+                    "small_net": None,
+                    "medium_net": None,
+                    "large_net": (
+                        main_net - super_large_net
+                        if main_net is not None and super_large_net is not None
+                        else None
+                    ),
+                    "super_large_net": super_large_net,
+                    "main_ratio": (
+                        round((_number(raw.get("ratioamount")) or 0) * 100, 4)
+                        if raw.get("ratioamount") is not None
+                        else None
+                    ),
+                }
+            )
+        recent = history[-1] if history else {}
+        source_name = "新浪财经资金流向（备用）"
+        source_url = f"https://finance.sina.com.cn/realstock/company/{symbol}/nc.shtml"
+    return {
+        "available": bool(history),
+        "latest": recent,
+        "history": history,
+        "source_name": source_name,
+        "source_url": source_url,
+    }
+
+
+def fetch_research_dossier(quote_code: str, force: bool = False) -> dict[str, Any]:
+    clean = re.sub(r"[^A-Za-z0-9.]", "", quote_code)[:32]
+    if not re.fullmatch(r"(?:0|1|105|106|107|116)\.[A-Za-z0-9-]{1,15}", clean):
+        return {"status": "invalid", "message": "无效的市场代码"}
+    if not force:
+        with _dossier_cache_lock:
+            cached = _dossier_cache.get(clean)
+            if cached and time.time() - cached[0] < 600:
+                return cached[1]
+
+    snapshot = fetch_asset_snapshot(clean)
+    a_identity = _a_secu_code(clean)
+    sections: dict[str, Any] = {
+        "financials": {"available": False, "message": "当前市场暂未接入该项"},
+        "announcements": {"available": False, "items": []},
+        "reports": {"available": False, "items": []},
+        "fund_flow": {"available": False, "history": []},
+    }
+    if a_identity:
+        code, secu_code = a_identity
+        jobs = {
+            "financials": (_fetch_financials, (code, secu_code)),
+            "announcements": (_fetch_announcements, (code,)),
+            "reports": (_fetch_reports, (code,)),
+            "fund_flow": (_fetch_fund_flow, (clean,)),
+        }
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(function, *arguments): key
+                for key, (function, arguments) in jobs.items()
+            }
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    sections[key] = future.result()
+                except Exception:
+                    sections[key] = {"available": False, "message": "数据源暂不可用"}
+
+    report_items = sections.get("reports", {}).get("items") or []
+    forward_pe_values = [
+        float(item["forecast_pe"])
+        for item in report_items
+        if item.get("forecast_pe") is not None and float(item["forecast_pe"]) > 0
+    ]
+    ratings: dict[str, int] = {}
+    for item in report_items:
+        rating = str(item.get("rating") or "未评级")
+        ratings[rating] = ratings.get(rating, 0) + 1
+    snapshot_ready = snapshot.get("status") == "success"
+    sections["valuation"] = {
+        "available": snapshot_ready,
+        "pe": snapshot.get("pe"),
+        "pb": snapshot.get("pb"),
+        "forward_pe": (
+            round(sum(forward_pe_values) / len(forward_pe_values), 2)
+            if forward_pe_values
+            else None
+        ),
+        "report_count": len(report_items),
+        "ratings": ratings,
+        "history_percentile": None,
+        "message": "历史估值分位待日线样本积累后启用",
+        "source_name": snapshot.get("source") or "公开行情数据",
+        "source_url": sections.get("reports", {}).get("source_url", ""),
+    }
+
+    available_count = sum(bool(section.get("available")) for section in sections.values())
+    dossier = {
+        "status": "success" if snapshot.get("status") == "success" else "partial",
+        "updated_at": _now(),
+        "market_scope": "A股完整底稿" if a_identity else "跨市场基础底稿",
+        "snapshot": snapshot,
+        **sections,
+        "completeness": {
+            "available": available_count + (1 if snapshot.get("status") == "success" else 0),
+            "total": 6,
+            "text": f"已取得 {available_count + (1 if snapshot.get('status') == 'success' else 0)}/6 项客观数据",
+        },
+    }
+    with _dossier_cache_lock:
+        if len(_dossier_cache) >= 100:
+            _dossier_cache.clear()
+        _dossier_cache[clean] = (time.time(), dossier)
+    return dossier
 
 
 def get_research_overview() -> dict[str, Any]:

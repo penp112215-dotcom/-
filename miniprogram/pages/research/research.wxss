@@ -188,6 +188,52 @@ page {
 .small-button { padding: 13rpx; border-radius: 11rpx; background: #fff; color: #1d5fcf; font-size: 20rpx; font-weight: 700; text-align: center; }
 .small-button-dark { background: #2b3850; color: #fff; }
 
+.dossier-loading {
+  margin-top: 14rpx;
+  padding: 20rpx;
+  border-radius: 15rpx;
+  background: #f2f6fc;
+  color: #6d7b90;
+  font-size: 20rpx;
+  text-align: center;
+}
+.dossier { margin-top: 16rpx; }
+.dossier-summary,
+.data-section-head,
+.document-row { display: flex; justify-content: space-between; align-items: center; }
+.dossier-summary {
+  padding: 20rpx 22rpx;
+  border-radius: 18rpx 18rpx 0 0;
+  background: #286be1;
+  color: #fff;
+}
+.dossier-title { display: block; font-size: 24rpx; font-weight: 800; }
+.dossier-scope { display: block; margin-top: 5rpx; color: #cbdcff; font-size: 16rpx; }
+.dossier-count { padding: 7rpx 12rpx; border-radius: 999rpx; background: rgba(255,255,255,.16); font-size: 20rpx; font-weight: 750; }
+.data-section { padding: 22rpx; border: 1rpx solid #e6eaf0; border-top: 0; background: #fff; }
+.data-section:last-of-type { border-radius: 0 0 18rpx 18rpx; }
+.data-section-head { align-items: flex-start; margin-bottom: 17rpx; }
+.data-title { display: block; color: #1b2638; font-size: 23rpx; font-weight: 800; }
+.data-subtitle { display: block; margin-top: 5rpx; color: #98a2b1; font-size: 16rpx; }
+.source-action { color: #2d6de7; font-size: 18rpx; }
+.financial-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; }
+.financial-item,
+.flow-item { display: flex; flex-direction: column; min-width: 0; padding: 14rpx 10rpx; border-radius: 12rpx; background: #f7f9fc; text-align: center; }
+.financial-value,
+.flow-value { color: #243148; font-size: 21rpx; font-weight: 750; }
+.financial-label,
+.flow-label { margin-top: 6rpx; color: #747f90; font-size: 16rpx; }
+.financial-yoy { margin-top: 4rpx; color: #9aa3b1; font-size: 14rpx; }
+.flow-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; }
+.valuation-tip { display: block; margin-top: 12rpx; color: #9aa3b1; font-size: 15rpx; line-height: 1.45; }
+.document-row { gap: 16rpx; padding: 15rpx 0; align-items: flex-start; }
+.document-row + .document-row { border-top: 1rpx solid #eef1f5; }
+.document-main { flex: 1; min-width: 0; }
+.document-title { display: block; color: #2a3547; font-size: 19rpx; line-height: 1.45; }
+.document-meta { display: block; margin-top: 6rpx; color: #9aa3b1; font-size: 15rpx; }
+.document-link { flex: none; color: #2d6de7; font-size: 17rpx; }
+.missing-data { padding: 18rpx 22rpx; border: 1rpx solid #f0e4c9; border-top: 0; border-radius: 0 0 18rpx 18rpx; background: #fffaf0; color: #927342; font-size: 16rpx; line-height: 1.5; }
+
 .task-card { margin-top: 18rpx; padding: 22rpx; border: 1rpx solid #dce6fa; border-radius: 17rpx; background: #f7f9ff; }
 .task-title { font-size: 22rpx; font-weight: 750; }
 .task-progress { color: #2d6de7; font-size: 20rpx; font-weight: 700; }

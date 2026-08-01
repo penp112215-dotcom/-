@@ -57,6 +57,19 @@ interface ResearchTask {
   error: string
 }
 
+interface ResearchDossier {
+  status: string
+  updated_at: string
+  market_scope: string
+  snapshot: AssetSnapshot
+  financials: any
+  valuation: any
+  announcements: any
+  reports: any
+  fund_flow: any
+  completeness: { available: number; total: number; text: string }
+}
+
 interface DisplayIndex extends IndexItem {
   priceText: string
   changeText: string
@@ -124,6 +137,40 @@ function displayAsset(item: AssetSnapshot): DisplayAsset {
   }
 }
 
+function displayDossier(item: ResearchDossier): any {
+  const financial = (item.financials || {}).latest || {}
+  const flow = (item.fund_flow || {}).latest || {}
+  return {
+    ...item,
+    valuation: {
+      ...(item.valuation || {}),
+      peText: numberText((item.valuation || {}).pe),
+      pbText: numberText((item.valuation || {}).pb),
+      forwardPeText: numberText((item.valuation || {}).forward_pe),
+    },
+    financials: {
+      ...(item.financials || {}),
+      period: financial.period || '--',
+      revenueText: moneyText(financial.revenue),
+      revenueYoyText: percentText(financial.revenue_yoy),
+      netProfitText: moneyText(financial.net_profit),
+      netProfitYoyText: percentText(financial.net_profit_yoy),
+      roeText: percentText(financial.roe),
+      grossMarginText: percentText(financial.gross_margin),
+      netMarginText: percentText(financial.net_margin),
+      debtRatioText: percentText(financial.debt_ratio),
+    },
+    fund_flow: {
+      ...(item.fund_flow || {}),
+      date: flow.date || '--',
+      mainNetText: moneyText(flow.main_net),
+      largeNetText: moneyText(flow.large_net),
+      superLargeNetText: moneyText(flow.super_large_net),
+      mainNetCls: Number(flow.main_net || 0) >= 0 ? 'flow-value rise' : 'flow-value fall',
+    },
+  }
+}
+
 Page({
   data: {
     loading: true,
@@ -135,6 +182,8 @@ Page({
     searching: false,
     searchItems: [] as SearchItem[],
     asset: null as DisplayAsset | null,
+    dossier: null as any,
+    dossierLoading: false,
     noteTitle: '',
     noteContent: '',
     notes: [] as ResearchNote[],
@@ -185,7 +234,7 @@ Page({
       wx.showToast({ title: '请输入股票名称或代码', icon: 'none' })
       return
     }
-    this.setData({ searching: true, searchItems: [], asset: null })
+    this.setData({ searching: true, searchItems: [], asset: null, dossier: null })
     request<any>(API_PATH.RESEARCH_SEARCH, {
       data: { q: query },
       timeout: 15000,
@@ -206,9 +255,30 @@ Page({
       .then((asset) => {
         if (asset.status !== 'success') throw new Error('unavailable')
         this.setData({ asset: displayAsset(asset), searchItems: [] })
+        this.loadDossier(quoteCode)
       })
       .catch(() => wx.showToast({ title: '个股数据暂不可用', icon: 'none' }))
       .finally(() => wx.hideLoading())
+  },
+
+  loadDossier(quoteCode: string) {
+    this.setData({ dossierLoading: true, dossier: null })
+    request<ResearchDossier>(API_PATH.RESEARCH_DOSSIER, {
+      data: { quote_code: quoteCode },
+      timeout: 60000,
+    })
+      .then((dossier) => this.setData({ dossier: displayDossier(dossier) }))
+      .catch(() => wx.showToast({ title: '部分研究数据暂不可用', icon: 'none' }))
+      .finally(() => this.setData({ dossierLoading: false }))
+  },
+
+  onOpenSource(e: WechatMiniprogram.BaseEvent) {
+    const url = String((e.currentTarget.dataset || {}).url || '')
+    if (!url) return
+    wx.setClipboardData({
+      data: url,
+      success: () => wx.showToast({ title: '原文链接已复制', icon: 'none' }),
+    })
   },
 
   onRunReview() {
