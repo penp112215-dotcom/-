@@ -2,6 +2,7 @@
   "pages": [
     "pages/arbitrage/arbitrage",
     "pages/portfolio/portfolio",
+    "pages/research/research",
     "pages/news/news",
     "pages/index/index",
     "pages/market/market",
@@ -29,6 +30,10 @@
       {
         "pagePath": "pages/market/market",
         "text": "市场情绪"
+      },
+      {
+        "pagePath": "pages/research/research",
+        "text": "AI投研"
       }
     ]
   },

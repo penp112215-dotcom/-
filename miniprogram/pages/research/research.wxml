@@ -1,0 +1,144 @@
+<view class="page">
+  <view class="header">
+    <view>
+      <text class="title">AI投研</text>
+      <text class="subtitle">客观数据先行，结论保留依据与缺口</text>
+    </view>
+    <text class="updated">{{updatedAt}}</text>
+  </view>
+
+  <view class="ai-status {{ai.configured ? 'ai-ready' : ''}}">
+    <view class="ai-dot"></view>
+    <view class="ai-copy">
+      <text class="ai-title">{{ai.configured ? ai.provider + ' · ' + ai.model : 'AI服务待配置'}}</text>
+      <text class="ai-desc">{{ai.message}}</text>
+    </view>
+  </view>
+
+  <view class="section-head">
+    <text class="section-title">市场温度</text>
+    <text class="section-tip">下拉刷新</text>
+  </view>
+
+  <view wx:if="{{loading}}" class="state">正在读取全球市场</view>
+  <view wx:elif="{{error && indices.length === 0}}" class="state state-error">{{error}}</view>
+  <view wx:else class="index-grid">
+    <view class="index-card" wx:for="{{indices}}" wx:key="code">
+      <text class="index-name">{{item.name}}</text>
+      <view class="index-line">
+        <text class="index-price">{{item.priceText}}</text>
+        <text class="{{item.changeCls}}">{{item.changeText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="action-grid">
+    <view class="action-card action-primary" bindtap="onRunReview">
+      <text class="action-icon">复</text>
+      <text class="action-name">今日复盘</text>
+      <text class="action-desc">市场事实与跟踪清单</text>
+    </view>
+    <view class="action-card" bindtap="onRunResearch">
+      <text class="action-icon">研</text>
+      <text class="action-name">个股研究</text>
+      <text class="action-desc">估值、财务、资金与风险</text>
+    </view>
+    <view class="action-card" bindtap="onRunDebate">
+      <text class="action-icon">辩</text>
+      <text class="action-name">多空辩论</text>
+      <text class="action-desc">共识、分歧与验证事项</text>
+    </view>
+  </view>
+
+  <view class="section-head stock-head">
+    <text class="section-title">个股研究</text>
+    <text class="section-tip">A股 · 港股 · 美股</text>
+  </view>
+  <view class="search-box">
+    <input
+      class="search-input"
+      value="{{query}}"
+      placeholder="输入股票名称或代码"
+      bindinput="onQueryInput"
+      confirm-type="search"
+      bindconfirm="onSearch"
+    />
+    <view class="search-button" bindtap="onSearch">{{searching ? '搜索中' : '搜索'}}</view>
+  </view>
+
+  <view class="search-results" wx:if="{{searchItems.length}}">
+    <view
+      class="search-item"
+      wx:for="{{searchItems}}"
+      wx:key="quote_code"
+      data-quote-code="{{item.quote_code}}"
+      bindtap="onSelectAsset"
+    >
+      <view>
+        <text class="search-name">{{item.name}}</text>
+        <text class="search-symbol">{{item.symbol}} · {{item.security_type}}</text>
+      </view>
+      <text class="market-tag">{{item.market}}</text>
+    </view>
+  </view>
+
+  <view class="asset-card" wx:if="{{asset}}">
+    <view class="asset-head">
+      <view>
+        <text class="asset-name">{{asset.name}}</text>
+        <text class="asset-symbol">{{asset.symbol}} · {{asset.source}}</text>
+      </view>
+      <view class="asset-price-box">
+        <text class="asset-price">{{asset.priceText}}</text>
+        <text class="{{asset.changeCls}}">{{asset.changeText}}</text>
+      </view>
+    </view>
+    <view class="metric-grid">
+      <view class="metric"><text class="metric-value">{{asset.peText}}</text><text class="metric-label">市盈率</text></view>
+      <view class="metric"><text class="metric-value">{{asset.pbText}}</text><text class="metric-label">市净率</text></view>
+      <view class="metric"><text class="metric-value">{{asset.turnoverText}}</text><text class="metric-label">换手率</text></view>
+      <view class="metric"><text class="metric-value">{{asset.marketCapText}}</text><text class="metric-label">总市值</text></view>
+    </view>
+    <view class="asset-actions">
+      <view class="small-button" bindtap="onRunResearch">生成研究</view>
+      <view class="small-button small-button-dark" bindtap="onRunDebate">多空辩论</view>
+    </view>
+  </view>
+
+  <view class="task-card" wx:if="{{activeTask}}">
+    <view class="task-head">
+      <text class="task-title">{{activeTask.title}}</text>
+      <text class="task-progress">{{activeTask.progress}}%</text>
+    </view>
+    <view class="progress-track"><view class="progress-value" style="width: {{activeTask.progress}}%"></view></view>
+    <text class="task-stage">{{activeTask.stage}}</text>
+    <text class="task-error" wx:if="{{activeTask.error}}">{{activeTask.error}}</text>
+    <text class="task-result" wx:if="{{activeTask.result}}">{{activeTask.result}}</text>
+  </view>
+
+  <view class="section-head note-head">
+    <text class="section-title">研究记录</text>
+    <text class="section-tip">保存于自己的后端</text>
+  </view>
+  <view class="note-editor">
+    <input class="note-title-input" value="{{noteTitle}}" placeholder="标题（可选）" bindinput="onNoteTitleInput" />
+    <textarea class="note-content-input" value="{{noteContent}}" placeholder="记录观点、依据和需要继续验证的问题" maxlength="50000" bindinput="onNoteContentInput"></textarea>
+    <view class="save-note" bindtap="onSaveNote">{{savingNote ? '保存中' : '保存记录'}}</view>
+  </view>
+
+  <view class="note-list" wx:if="{{notes.length}}">
+    <view class="note-card" wx:for="{{notes}}" wx:key="id">
+      <view class="note-card-head">
+        <view>
+          <text class="note-card-title">{{item.title}}</text>
+          <text class="note-meta">{{item.symbol || '综合研究'}} · {{item.updated_at}}</text>
+        </view>
+        <text class="delete-note" data-id="{{item.id}}" bindtap="onDeleteNote">删除</text>
+      </view>
+      <text class="note-body">{{item.content}}</text>
+    </view>
+  </view>
+
+  <view class="disclaimer">仅整理公开数据与研究过程，不预测涨跌，不构成投资建议。</view>
+  <view class="footer-space"></view>
+</view>

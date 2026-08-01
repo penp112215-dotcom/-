@@ -18,8 +18,20 @@ from typing import Any
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from arbitrage_engine import build_arbitrage_snapshot, get_arbitrage_history
+from research_engine import (
+    create_note,
+    create_research_task,
+    delete_note,
+    fetch_asset_snapshot,
+    get_research_overview,
+    get_research_task,
+    list_notes,
+    list_research_tasks,
+    search_assets,
+)
 
 # ---------------------------------------------------------------------------
 # 全局配置
@@ -99,6 +111,82 @@ def arbitrage_history(code: str, days: int = 3) -> dict[str, Any]:
     if not (code.isdigit() and len(code) == 6):
         raise HTTPException(status_code=400, detail="基金代码必须为6位数字")
     return get_arbitrage_history(code, days)
+
+
+# ---------------------------------------------------------------------------
+# AI 投研：市场复盘、跨市场搜索、研究记录和异步模型任务
+# ---------------------------------------------------------------------------
+class ResearchNoteInput(BaseModel):
+    title: str = Field(default="研究记录", max_length=120)
+    content: str = Field(min_length=1, max_length=50_000)
+    symbol: str = Field(default="", max_length=20)
+    note_type: str = Field(default="manual", max_length=30)
+
+
+class ResearchTaskInput(BaseModel):
+    task_type: str = Field(default="research", max_length=30)
+    title: str = Field(default="AI投研任务", max_length=120)
+    prompt: str = Field(min_length=1, max_length=20_000)
+    symbol: str = Field(default="", max_length=20)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.get("/api/research/overview")
+def research_overview() -> dict[str, Any]:
+    return get_research_overview()
+
+
+@app.get("/api/research/search")
+def research_search(q: str = "") -> dict[str, Any]:
+    return search_assets(q)
+
+
+@app.get("/api/research/asset")
+def research_asset(quote_code: str) -> dict[str, Any]:
+    return fetch_asset_snapshot(quote_code)
+
+
+@app.get("/api/research/notes")
+def research_notes(limit: int = 30) -> dict[str, Any]:
+    return {"items": list_notes(limit)}
+
+
+@app.post("/api/research/notes")
+def research_note_create(body: ResearchNoteInput) -> dict[str, Any]:
+    return create_note(body.title, body.content, body.symbol, body.note_type)
+
+
+@app.delete("/api/research/notes/{note_id}")
+def research_note_delete(note_id: str) -> dict[str, Any]:
+    if not re.fullmatch(r"[a-f0-9]{32}", note_id):
+        raise HTTPException(status_code=400, detail="无效的记录编号")
+    return {"deleted": delete_note(note_id)}
+
+
+@app.get("/api/research/tasks")
+def research_tasks(limit: int = 20) -> dict[str, Any]:
+    return {"items": list_research_tasks(limit)}
+
+
+@app.post("/api/research/tasks")
+def research_task_create(body: ResearchTaskInput) -> dict[str, Any]:
+    return create_research_task(
+        body.task_type,
+        body.title,
+        body.prompt,
+        body.symbol,
+        body.context,
+    )
+
+
+@app.get("/api/research/tasks/{task_id}")
+def research_task(task_id: str) -> dict[str, Any]:
+    if not re.fullmatch(r"[a-f0-9]{32}", task_id):
+        raise HTTPException(status_code=400, detail="无效的任务编号")
+    task = get_research_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return task
 
 
 # ---------------------------------------------------------------------------
@@ -594,6 +682,11 @@ def root() -> dict[str, Any]:
         "endpoints": [
             "/api/arbitrage",
             "/api/arbitrage/history/{code}",
+            "/api/research/overview",
+            "/api/research/search?q=",
+            "/api/research/asset?quote_code=",
+            "/api/research/notes",
+            "/api/research/tasks",
             "/api/portfolio",
             "/api/stocks/search",
             "/api/market",

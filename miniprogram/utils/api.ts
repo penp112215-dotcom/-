@@ -14,6 +14,11 @@ export const API_PATH = {
   NEWS: '/api/news',
   MARKET: '/api/market',
   BRIEFING: '/api/briefing',
+  RESEARCH_OVERVIEW: '/api/research/overview',
+  RESEARCH_SEARCH: '/api/research/search',
+  RESEARCH_ASSET: '/api/research/asset',
+  RESEARCH_NOTES: '/api/research/notes',
+  RESEARCH_TASKS: '/api/research/tasks',
 } as const
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE'
