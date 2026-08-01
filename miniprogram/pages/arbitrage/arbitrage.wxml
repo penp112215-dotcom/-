@@ -45,6 +45,17 @@
     <text class="notice-text">{{message}}</text>
   </view>
 
+  <view class="alert-panel" wx:if="{{alerts.length}}">
+    <view class="alert-head">
+      <text>今日状态变化</text>
+      <text>{{alerts.length}} 条</text>
+    </view>
+    <view class="alert-item" wx:for="{{alerts}}" wx:key="code">
+      <text class="alert-title">{{item.name}} {{item.code}}</text>
+      <text class="alert-detail">{{item.detail}}</text>
+    </view>
+  </view>
+
   <scroll-view scroll-x class="filters" enhanced show-scrollbar="{{false}}">
     <view class="filter-row">
       <view
@@ -86,6 +97,7 @@
           <view class="name-line">
             <text class="fund-name">{{item.name}}</text>
             <text class="{{item.signalCls}}">{{item.signalText}}</text>
+            <text class="changed-tag" wx:if="{{item.status_changed}}">有变化</text>
           </view>
           <text class="fund-code">{{item.code}} · {{item.fund_type}}</text>
         </view>
@@ -113,18 +125,33 @@
       <view class="quick-info">
         <text>{{item.subscription_status}}</text>
         <text class="quick-divider">·</text>
-        <text>估值可信度 {{item.confidenceText}}</text>
+        <text>较3日均值</text>
+        <text class="{{item.trendCls}}">{{item.trendText}}</text>
         <text class="expand">{{item.expanded ? '收起' : '详情'}} {{item.expanded ? '⌃' : '⌄'}}</text>
       </view>
 
       <view class="details" wx:if="{{item.expanded}}">
+        <view class="nav-grid">
+          <view class="nav-cell">
+            <text class="nav-value">{{item.officialNavText}}</text>
+            <text class="nav-caption">确认净值</text>
+          </view>
+          <view class="nav-cell">
+            <text class="nav-value">{{item.estimatedNavText}}</text>
+            <text class="nav-caption">盘中估值</text>
+          </view>
+          <view class="nav-cell">
+            <text class="nav-value">{{item.average3dText}}</text>
+            <text class="nav-caption">3日平均溢价</text>
+          </view>
+        </view>
         <view class="detail-row">
           <text class="detail-label">可执行价格</text>
           <text class="detail-value">{{item.priceText}}（{{item.pricing_basis}}）</text>
         </view>
         <view class="detail-row">
-          <text class="detail-label">{{item.nav_label}}</text>
-          <text class="detail-value">{{item.navText}} · {{item.nav_date}}</text>
+          <text class="detail-label">本次计算基准</text>
+          <text class="detail-value">{{item.nav_label}} {{item.navText}} · {{item.nav_date}}</text>
         </view>
         <view class="detail-row">
           <text class="detail-label">毛溢价</text>
@@ -137,6 +164,10 @@
         <view class="detail-row">
           <text class="detail-label">当日成交额</text>
           <text class="detail-value">{{item.amountText}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">历史样本</text>
+          <text class="detail-value">{{item.history_samples}} 个5分钟快照 · 可信度 {{item.confidenceText}}</text>
         </view>
         <view class="cost-line">
           申购 {{item.subscription_fee_pct}}% · 卖出 {{item.sell_fee_pct}}% ·

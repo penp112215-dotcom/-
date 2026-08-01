@@ -15,7 +15,16 @@ interface ScanSummary {
   opportunities: number
   need_verification: number
   watching: number
+  status_changes: number
   elapsed_ms: number
+}
+
+interface ArbitrageAlert {
+  code: string
+  name: string
+  title: string
+  detail: string
+  level: string
 }
 
 interface ArbitrageItem {
@@ -28,6 +37,11 @@ interface ArbitrageItem {
   pricing_basis: string
   amount: number
   reference_nav: number
+  official_nav?: number | null
+  estimated_nav?: number | null
+  official_premium_pct?: number | null
+  estimated_premium_pct?: number | null
+  nav_basis: string
   nav_label: string
   nav_date: string
   gross_premium_pct: number
@@ -48,6 +62,10 @@ interface ArbitrageItem {
   data_confidence: string
   signal: string
   signal_text: string
+  average_premium_3d_pct?: number | null
+  premium_vs_3d_pct?: number | null
+  history_samples: number
+  status_changed: boolean
 }
 
 interface DisplayItem extends ArbitrageItem {
@@ -58,6 +76,11 @@ interface DisplayItem extends ArbitrageItem {
   expanded: boolean
   priceText: string
   navText: string
+  officialNavText: string
+  estimatedNavText: string
+  average3dText: string
+  trendText: string
+  trendCls: string
   grossText: string
   netText: string
   perInvestorText: string
@@ -74,6 +97,7 @@ interface ArbitrageResponse {
   account?: AccountSummary
   summary?: ScanSummary
   items?: ArbitrageItem[]
+  alerts?: ArbitrageAlert[]
 }
 
 const EMPTY_ACCOUNT: AccountSummary = {
@@ -91,6 +115,7 @@ const EMPTY_SUMMARY: ScanSummary = {
   opportunities: 0,
   need_verification: 0,
   watching: 0,
+  status_changes: 0,
   elapsed_ms: 0,
 }
 
@@ -107,8 +132,27 @@ function signalClass(signal: string): string {
   return 'signal signal-none'
 }
 
+function percent(value?: number | null, withSign = false): string {
+  if (value == null || !Number.isFinite(Number(value))) return '--'
+  const number = Number(value)
+  const sign = withSign && number > 0 ? '+' : ''
+  return sign + number.toFixed(2) + '%'
+}
+
+function nav(value?: number | null): string {
+  if (value == null || !Number.isFinite(Number(value))) return '--'
+  return Number(value).toFixed(4)
+}
+
+function filterItems(items: DisplayItem[], key: string): DisplayItem[] {
+  if (key === 'all') return items
+  if (key === 'changed') return items.filter((item) => item.status_changed)
+  return items.filter((item) => item.signal === key)
+}
+
 function toDisplay(item: ArbitrageItem): DisplayItem {
   const positive = Number(item.net_edge_pct || 0) > 0
+  const trend = item.premium_vs_3d_pct
   return {
     ...item,
     cardCls: positive ? 'fund-card fund-card-positive' : 'fund-card',
@@ -118,6 +162,11 @@ function toDisplay(item: ArbitrageItem): DisplayItem {
     expanded: false,
     priceText: Number(item.exit_price || item.price || 0).toFixed(4),
     navText: Number(item.reference_nav || 0).toFixed(4),
+    officialNavText: nav(item.official_nav),
+    estimatedNavText: nav(item.estimated_nav),
+    average3dText: percent(item.average_premium_3d_pct),
+    trendText: trend == null ? '积累中' : percent(trend, true),
+    trendCls: Number(trend || 0) > 0 ? 'trend trend-up' : 'trend',
     grossText: Number(item.gross_premium_pct || 0).toFixed(2) + '%',
     netText: (positive ? '+' : '') + Number(item.net_edge_pct || 0).toFixed(2) + '%',
     perInvestorText: money(Number(item.per_investor_limit || 0)),
@@ -141,6 +190,7 @@ Page({
     items: [] as DisplayItem[],
     filters: [
       { key: 'all', label: '全部' },
+      { key: 'changed', label: '有变化' },
       { key: 'opportunity', label: '可执行' },
       { key: 'verify', label: '待核实' },
       { key: 'watch', label: '观察' },
@@ -149,6 +199,7 @@ Page({
     activeFilter: 'all',
     displayUpdatedAt: '--',
     message: '',
+    alerts: [] as ArbitrageAlert[],
     loading: true,
     error: '',
   },
@@ -175,9 +226,7 @@ Page({
   onFilterTap(e: WechatMiniprogram.BaseEvent) {
     const key = String((e.currentTarget.dataset || {}).key || 'all')
     const allItems = this.data.allItems
-    const items = key === 'all'
-      ? allItems
-      : allItems.filter((item) => item.signal === key)
+    const items = filterItems(allItems, key)
     this.setData({ activeFilter: key, items })
   },
 
@@ -188,9 +237,7 @@ Page({
       expanded: item.code === code ? !item.expanded : item.expanded,
     }))
     const activeFilter = this.data.activeFilter
-    const items = activeFilter === 'all'
-      ? allItems
-      : allItems.filter((item) => item.signal === activeFilter)
+    const items = filterItems(allItems, activeFilter)
     this.setData({ allItems, items })
   },
 
@@ -203,13 +250,12 @@ Page({
           .map(toDisplay)
           .sort((a, b) => b.net_edge_pct - a.net_edge_pct)
         const activeFilter = this.data.activeFilter
-        const items = activeFilter === 'all'
-          ? allItems
-          : allItems.filter((item) => item.signal === activeFilter)
+        const items = filterItems(allItems, activeFilter)
         this.setData({
           account,
           accountTotalText: money(account.total_cash),
           summary: res.summary || EMPTY_SUMMARY,
+          alerts: res.alerts || [],
           allItems,
           items,
           displayUpdatedAt: res.updated_at || '--',

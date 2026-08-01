@@ -16,10 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from arbitrage_engine import build_arbitrage_snapshot
+from arbitrage_engine import build_arbitrage_snapshot, get_arbitrage_history
 
 # ---------------------------------------------------------------------------
 # 全局配置
@@ -91,6 +91,14 @@ def _safe_get(url: str, headers: dict | None = None, **kw) -> requests.Response 
 def arbitrage() -> dict[str, Any]:
     """全市场 LOF 价差、申购状态、账户容量和净空间筛选。"""
     return build_arbitrage_snapshot()
+
+
+@app.get("/api/arbitrage/history/{code}")
+def arbitrage_history(code: str, days: int = 3) -> dict[str, Any]:
+    """返回单只基金最近 1-30 天的溢价与状态历史。"""
+    if not (code.isdigit() and len(code) == 6):
+        raise HTTPException(status_code=400, detail="基金代码必须为6位数字")
+    return get_arbitrage_history(code, days)
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +532,6 @@ def market() -> dict[str, Any]:
 # 3. 资讯聚合接口
 # ---------------------------------------------------------------------------
 import httpx
-from fastapi import HTTPException
 
 # 假设未来 Docker 里的 newsnow 运行在本地 3000 端口
 NEWSNOW_API_URL = "http://127.0.0.1:3000/api/news"
@@ -586,6 +593,7 @@ def root() -> dict[str, Any]:
         "version": "0.1.0",
         "endpoints": [
             "/api/arbitrage",
+            "/api/arbitrage/history/{code}",
             "/api/portfolio",
             "/api/stocks/search",
             "/api/market",

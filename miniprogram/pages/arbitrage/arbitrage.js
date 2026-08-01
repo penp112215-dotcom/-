@@ -15,6 +15,7 @@ const EMPTY_SUMMARY = {
     opportunities: 0,
     need_verification: 0,
     watching: 0,
+    status_changes: 0,
     elapsed_ms: 0,
 };
 function money(value) {
@@ -33,8 +34,28 @@ function signalClass(signal) {
         return 'signal signal-closed';
     return 'signal signal-none';
 }
+function percent(value, withSign = false) {
+    if (value == null || !Number.isFinite(Number(value)))
+        return '--';
+    const number = Number(value);
+    const sign = withSign && number > 0 ? '+' : '';
+    return sign + number.toFixed(2) + '%';
+}
+function nav(value) {
+    if (value == null || !Number.isFinite(Number(value)))
+        return '--';
+    return Number(value).toFixed(4);
+}
+function filterItems(items, key) {
+    if (key === 'all')
+        return items;
+    if (key === 'changed')
+        return items.filter((item) => item.status_changed);
+    return items.filter((item) => item.signal === key);
+}
 function toDisplay(item) {
     const positive = Number(item.net_edge_pct || 0) > 0;
+    const trend = item.premium_vs_3d_pct;
     return {
         ...item,
         cardCls: positive ? 'fund-card fund-card-positive' : 'fund-card',
@@ -44,6 +65,11 @@ function toDisplay(item) {
         expanded: false,
         priceText: Number(item.exit_price || item.price || 0).toFixed(4),
         navText: Number(item.reference_nav || 0).toFixed(4),
+        officialNavText: nav(item.official_nav),
+        estimatedNavText: nav(item.estimated_nav),
+        average3dText: percent(item.average_premium_3d_pct),
+        trendText: trend == null ? '积累中' : percent(trend, true),
+        trendCls: Number(trend || 0) > 0 ? 'trend trend-up' : 'trend',
         grossText: Number(item.gross_premium_pct || 0).toFixed(2) + '%',
         netText: (positive ? '+' : '') + Number(item.net_edge_pct || 0).toFixed(2) + '%',
         perInvestorText: money(Number(item.per_investor_limit || 0)),
@@ -66,6 +92,7 @@ Page({
         items: [],
         filters: [
             { key: 'all', label: '全部' },
+            { key: 'changed', label: '有变化' },
             { key: 'opportunity', label: '可执行' },
             { key: 'verify', label: '待核实' },
             { key: 'watch', label: '观察' },
@@ -74,6 +101,7 @@ Page({
         activeFilter: 'all',
         displayUpdatedAt: '--',
         message: '',
+        alerts: [],
         loading: true,
         error: '',
     },
@@ -96,9 +124,7 @@ Page({
     onFilterTap(e) {
         const key = String((e.currentTarget.dataset || {}).key || 'all');
         const allItems = this.data.allItems;
-        const items = key === 'all'
-            ? allItems
-            : allItems.filter((item) => item.signal === key);
+        const items = filterItems(allItems, key);
         this.setData({ activeFilter: key, items });
     },
     onItemTap(e) {
@@ -108,9 +134,7 @@ Page({
             expanded: item.code === code ? !item.expanded : item.expanded,
         }));
         const activeFilter = this.data.activeFilter;
-        const items = activeFilter === 'all'
-            ? allItems
-            : allItems.filter((item) => item.signal === activeFilter);
+        const items = filterItems(allItems, activeFilter);
         this.setData({ allItems, items });
     },
     fetch(done) {
@@ -122,13 +146,12 @@ Page({
                 .map(toDisplay)
                 .sort((a, b) => b.net_edge_pct - a.net_edge_pct);
             const activeFilter = this.data.activeFilter;
-            const items = activeFilter === 'all'
-                ? allItems
-                : allItems.filter((item) => item.signal === activeFilter);
+            const items = filterItems(allItems, activeFilter);
             this.setData({
                 account,
                 accountTotalText: money(account.total_cash),
                 summary: res.summary || EMPTY_SUMMARY,
+                alerts: res.alerts || [],
                 allItems,
                 items,
                 displayUpdatedAt: res.updated_at || '--',

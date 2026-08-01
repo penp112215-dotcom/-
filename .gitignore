@@ -10,3 +10,8 @@ __pycache__/
 .cursor/
 project.private.config.json
 .env
+
+# Local runtime data
+data/*.db
+data/*.db-shm
+data/*.db-wal

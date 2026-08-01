@@ -22,6 +22,16 @@ class ArbitrageEngineTest(unittest.TestCase):
         result = _limit_scope_and_capacity(None, "开放申购")
         self.assertEqual(result["total_capacity"], 80_000)
 
+    def test_paused_subscription_is_not_reopened_by_redemption_wording(self):
+        result = _limit_scope_and_capacity(100, "暂停申购（开放赎回）")
+        self.assertEqual(result["normalized_status"], "suspended")
+        self.assertEqual(result["total_capacity"], 0)
+
+    def test_restricted_subscription_remains_available_for_verification(self):
+        result = _limit_scope_and_capacity(500, "限制大额申购")
+        self.assertEqual(result["normalized_status"], "restricted")
+        self.assertEqual(result["total_capacity"], 4_000)
+
     def test_low_confidence_qdii_is_not_executable(self):
         item = _assess_item(
             {
@@ -47,6 +57,9 @@ class ArbitrageEngineTest(unittest.TestCase):
         )
         self.assertNotEqual(item["signal"], "opportunity")
         self.assertEqual(item["data_confidence"], "low")
+        self.assertEqual(item["nav_basis"], "official")
+        self.assertEqual(item["official_nav"], 3.0)
+        self.assertIsNone(item["estimated_nav"])
 
 
 if __name__ == "__main__":

@@ -10,10 +10,14 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
+import os
+import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import closing
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -37,6 +41,14 @@ DEFAULT_SLIPPAGE_RATE = 0.001
 
 MAX_RESULT_ITEMS = 40
 DETAIL_CANDIDATE_COUNT = 50
+HISTORY_DAYS = 3
+HISTORY_BUCKET_MINUTES = 5
+HISTORY_DB_PATH = Path(
+    os.getenv(
+        "ARBITRAGE_DB_PATH",
+        str(Path(__file__).resolve().parent / "data" / "arbitrage_history.db"),
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +74,210 @@ ACCOUNT_CAPACITY = AccountCapacity()
 
 _cache_lock = threading.Lock()
 _cache: dict[str, tuple[float, Any]] = {}
+_history_lock = threading.Lock()
+
+
+def _history_connection() -> sqlite3.Connection:
+    """打开轻量历史库；每次短连接，兼容 FastAPI 多线程执行。"""
+    HISTORY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(HISTORY_DB_PATH, timeout=5)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS arbitrage_snapshots (
+            code TEXT NOT NULL,
+            bucket_time TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            name TEXT NOT NULL,
+            gross_premium_pct REAL NOT NULL,
+            net_edge_pct REAL NOT NULL,
+            official_nav REAL,
+            estimated_nav REAL,
+            nav_basis TEXT NOT NULL,
+            subscription_status TEXT NOT NULL,
+            max_subscription REAL,
+            signal TEXT NOT NULL,
+            PRIMARY KEY (code, bucket_time)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_arbitrage_history_code_time
+        ON arbitrage_snapshots(code, observed_at DESC)
+        """
+    )
+    connection.commit()
+    return connection
+
+
+def _history_bucket(now: dt.datetime) -> str:
+    minute = now.minute - now.minute % HISTORY_BUCKET_MINUTES
+    return now.replace(minute=minute, second=0, microsecond=0).isoformat(
+        timespec="minutes"
+    )
+
+
+def _load_history_context(codes: list[str]) -> dict[str, dict[str, Any]]:
+    """读取三日均值和最近一次状态，用于趋势与变化提醒。"""
+    if not codes:
+        return {}
+    placeholders = ",".join("?" for _ in codes)
+    cutoff = (dt.datetime.now() - dt.timedelta(days=HISTORY_DAYS)).isoformat(
+        timespec="seconds"
+    )
+    result: dict[str, dict[str, Any]] = {
+        code: {"average_premium_3d_pct": None, "history_samples": 0, "previous": None}
+        for code in codes
+    }
+    try:
+        with _history_lock, closing(_history_connection()) as connection:
+            averages = connection.execute(
+                f"""
+                SELECT code, AVG(gross_premium_pct) AS avg_premium, COUNT(*) AS samples
+                FROM arbitrage_snapshots
+                WHERE code IN ({placeholders}) AND observed_at >= ?
+                GROUP BY code
+                """,
+                [*codes, cutoff],
+            ).fetchall()
+            for row in averages:
+                result[row["code"]]["average_premium_3d_pct"] = round(
+                    float(row["avg_premium"]), 3
+                )
+                result[row["code"]]["history_samples"] = int(row["samples"])
+
+            previous_rows = connection.execute(
+                f"""
+                SELECT h.*
+                FROM arbitrage_snapshots h
+                INNER JOIN (
+                    SELECT code, MAX(observed_at) AS latest
+                    FROM arbitrage_snapshots
+                    WHERE code IN ({placeholders})
+                    GROUP BY code
+                ) latest
+                ON h.code = latest.code AND h.observed_at = latest.latest
+                """,
+                codes,
+            ).fetchall()
+            for row in previous_rows:
+                result[row["code"]]["previous"] = dict(row)
+    except sqlite3.Error:
+        return result
+    return result
+
+
+def _change_alert(item: dict, previous: dict | None) -> dict | None:
+    if not previous:
+        return None
+    changes: list[str] = []
+    old_status = str(previous.get("subscription_status") or "")
+    new_status = str(item.get("subscription_status") or "")
+    if old_status != new_status:
+        changes.append(f"申购状态：{old_status} → {new_status}")
+
+    old_limit = _to_float(previous.get("max_subscription"))
+    new_limit = _to_float(item.get("raw_max_subscription"))
+    if old_limit != new_limit:
+        old_text = "未披露" if old_limit is None else f"¥{old_limit:,.0f}"
+        new_text = "未披露" if new_limit is None else f"¥{new_limit:,.0f}"
+        changes.append(f"参考限额：{old_text} → {new_text}")
+
+    old_signal = str(previous.get("signal") or "")
+    new_signal = str(item.get("signal") or "")
+    if old_signal != new_signal:
+        changes.append(f"筛选状态：{old_signal} → {new_signal}")
+    if not changes:
+        return None
+    return {
+        "code": item["code"],
+        "name": item["name"],
+        "title": f"{item['name']} 状态有变化",
+        "detail": "；".join(changes),
+        "level": "important" if new_signal in {"opportunity", "verify"} else "normal",
+    }
+
+
+def _save_history(items: list[dict], now: dt.datetime) -> None:
+    if not items:
+        return
+    rows = [
+        (
+            item["code"],
+            _history_bucket(now),
+            now.isoformat(timespec="seconds"),
+            item["name"],
+            item["gross_premium_pct"],
+            item["net_edge_pct"],
+            item.get("official_nav"),
+            item.get("estimated_nav"),
+            item.get("nav_basis") or "official",
+            item.get("subscription_status") or "未知",
+            item.get("raw_max_subscription"),
+            item.get("signal") or "none",
+        )
+        for item in items
+    ]
+    try:
+        with _history_lock, closing(_history_connection()) as connection:
+            connection.executemany(
+                """
+                INSERT INTO arbitrage_snapshots (
+                    code, bucket_time, observed_at, name, gross_premium_pct,
+                    net_edge_pct, official_nav, estimated_nav, nav_basis,
+                    subscription_status, max_subscription, signal
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(code, bucket_time) DO UPDATE SET
+                    observed_at=excluded.observed_at,
+                    name=excluded.name,
+                    gross_premium_pct=excluded.gross_premium_pct,
+                    net_edge_pct=excluded.net_edge_pct,
+                    official_nav=excluded.official_nav,
+                    estimated_nav=excluded.estimated_nav,
+                    nav_basis=excluded.nav_basis,
+                    subscription_status=excluded.subscription_status,
+                    max_subscription=excluded.max_subscription,
+                    signal=excluded.signal
+                """,
+                rows,
+            )
+            connection.execute(
+                "DELETE FROM arbitrage_snapshots WHERE observed_at < ?",
+                (
+                    (now - dt.timedelta(days=30)).isoformat(timespec="seconds"),
+                ),
+            )
+            connection.commit()
+    except sqlite3.Error:
+        # 历史记录失败不能阻塞当次实时扫描。
+        return
+
+
+def get_arbitrage_history(code: str, days: int = 3) -> dict[str, Any]:
+    safe_days = max(1, min(days, 30))
+    cutoff = (dt.datetime.now() - dt.timedelta(days=safe_days)).isoformat(
+        timespec="seconds"
+    )
+    rows: list[dict[str, Any]] = []
+    try:
+        with _history_lock, closing(_history_connection()) as connection:
+            result = connection.execute(
+                """
+                SELECT observed_at, gross_premium_pct, net_edge_pct,
+                       official_nav, estimated_nav, nav_basis,
+                       subscription_status, max_subscription, signal
+                FROM arbitrage_snapshots
+                WHERE code = ? AND observed_at >= ?
+                ORDER BY observed_at ASC
+                """,
+                (code, cutoff),
+            ).fetchall()
+            rows = [dict(row) for row in result]
+    except sqlite3.Error:
+        pass
+    return {"code": code, "days": safe_days, "samples": len(rows), "items": rows}
 
 
 def _cache_get(key: str, ttl: int) -> Any | None:
@@ -242,8 +458,7 @@ def _fetch_lof_catalog_codes() -> list[str]:
     return _cache_set("lof:catalog-codes", codes)
 
 
-def _fetch_sina_lof_quotes() -> list[dict]:
-    codes = _fetch_lof_catalog_codes()
+def _fetch_sina_quotes_for_codes(codes: list[str]) -> list[dict]:
     if not codes:
         return []
     results: list[dict] = []
@@ -301,6 +516,31 @@ def _fetch_sina_lof_quotes() -> list[dict]:
                 }
             )
     return results
+
+
+def _fetch_sina_lof_quotes() -> list[dict]:
+    return _fetch_sina_quotes_for_codes(_fetch_lof_catalog_codes())
+
+
+def _merge_order_book(quotes: list[dict]) -> list[dict]:
+    """为入围候选补充买一/卖一，避免只用最新成交价计算。"""
+    if not quotes:
+        return quotes
+    sina_map = {
+        item["code"]: item
+        for item in _fetch_sina_quotes_for_codes([item["code"] for item in quotes])
+    }
+    merged = []
+    for quote in quotes:
+        order_book = sina_map.get(quote["code"]) or {}
+        merged.append(
+            {
+                **quote,
+                "bid1": order_book.get("bid1") or quote.get("bid1"),
+                "ask1": order_book.get("ask1") or quote.get("ask1"),
+            }
+        )
+    return merged
 
 
 def fetch_lof_quotes() -> list[dict]:
@@ -396,14 +636,24 @@ def _limit_scope_and_capacity(
     subscription_status: str,
 ) -> dict[str, Any]:
     """公开接口未给出公告限额口径时，按“每名投资者”保守计算。"""
-    open_for_subscription = "开放" in subscription_status or "限额" in subscription_status
-    if not open_for_subscription:
+    status_text = subscription_status.strip()
+    if any(word in status_text for word in ("暂停", "关闭", "封闭")):
+        normalized_status = "suspended"
+    elif any(word in status_text for word in ("限额", "限制")):
+        normalized_status = "restricted"
+    elif "开放申购" in status_text or status_text == "开放":
+        normalized_status = "open"
+    else:
+        normalized_status = "unknown"
+
+    if normalized_status not in {"open", "restricted"}:
         return {
             "limit_scope": "暂停或未知",
             "per_investor_limit": 0.0,
             "total_capacity": 0.0,
             "eligible_channels": 0,
             "limit_confirmed": False,
+            "normalized_status": normalized_status,
         }
 
     if max_subscription is None or max_subscription <= 0:
@@ -426,6 +676,7 @@ def _limit_scope_and_capacity(
         "eligible_channels": ACCOUNT_CAPACITY.total_channels,
         # 正式执行前仍需用基金公告或银河证券页面确认。
         "limit_confirmed": False,
+        "normalized_status": normalized_status,
     }
 
 
@@ -441,6 +692,12 @@ def _assess_item(quote: dict, nav: dict, basic: dict) -> dict | None:
     price = float(quote["price"])
     exit_price = _to_float(quote.get("bid1")) or price
     gross_premium = exit_price / reference_nav - 1
+    official_premium = (
+        exit_price / official_nav - 1 if official_nav is not None else None
+    )
+    estimated_premium = (
+        exit_price / estimated_nav - 1 if estimated_nav is not None else None
+    )
     name = str(quote.get("name") or nav.get("name") or quote["code"])
     fund_type = str(basic.get("fund_type") or "LOF")
     nav_is_estimate = estimated_nav is not None
@@ -511,6 +768,19 @@ def _assess_item(quote: dict, nav: dict, basic: dict) -> dict | None:
         "change_pct": round(float(quote.get("change_pct") or 0.0), 4),
         "amount": round(float(quote.get("amount") or 0.0), 2),
         "reference_nav": round(reference_nav, 6),
+        "official_nav": round(official_nav, 6) if official_nav is not None else None,
+        "estimated_nav": (
+            round(estimated_nav, 6) if estimated_nav is not None else None
+        ),
+        "official_premium_pct": (
+            round(official_premium * 100, 3) if official_premium is not None else None
+        ),
+        "estimated_premium_pct": (
+            round(estimated_premium * 100, 3)
+            if estimated_premium is not None
+            else None
+        ),
+        "nav_basis": "estimated" if nav_is_estimate else "official",
         "nav_label": nav_label,
         "nav_date": nav.get("estimate_time") or nav.get("nav_date") or "",
         "gross_premium_pct": round(gross_premium * 100, 3),
@@ -520,7 +790,9 @@ def _assess_item(quote: dict, nav: dict, basic: dict) -> dict | None:
         "safety_buffer_pct": round(safety_buffer * 100, 3),
         "net_edge_pct": round(net_edge * 100, 3),
         "subscription_status": str(basic.get("subscription_status") or "未知"),
+        "subscription_state": capacity["normalized_status"],
         "redemption_status": str(basic.get("redemption_status") or "未知"),
+        "raw_max_subscription": basic.get("max_subscription"),
         "published_per_investor_limit": capacity["per_investor_limit"],
         "per_investor_limit": suggested_per_investor,
         "published_total_capacity": published_capacity,
@@ -563,8 +835,11 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
                 "market_total": 0,
                 "analyzed": 0,
                 "opportunities": 0,
+                "need_verification": 0,
                 "watching": 0,
+                "status_changes": 0,
             },
+            "alerts": [],
             "items": [],
         }
 
@@ -584,10 +859,16 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
         key=lambda row: (row[0], float(row[1].get("amount") or 0.0)),
         reverse=True,
     )
-    detail_quotes = [row[1] for row in rough_candidates[:DETAIL_CANDIDATE_COUNT]]
+    detail_quotes = _merge_order_book(
+        [row[1] for row in rough_candidates[:DETAIL_CANDIDATE_COUNT]]
+    )
     details = _fetch_candidate_details([item["code"] for item in detail_quotes])
+    history_context = _load_history_context(
+        [item["code"] for item in detail_quotes]
+    )
 
     items = []
+    alerts = []
     for quote in detail_quotes:
         item = _assess_item(
             quote,
@@ -595,6 +876,19 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
             details.get(quote["code"]) or {},
         )
         if item is not None:
+            context = history_context.get(item["code"]) or {}
+            average_3d = context.get("average_premium_3d_pct")
+            item["average_premium_3d_pct"] = average_3d
+            item["history_samples"] = int(context.get("history_samples") or 0)
+            item["premium_vs_3d_pct"] = (
+                round(item["gross_premium_pct"] - average_3d, 3)
+                if average_3d is not None
+                else None
+            )
+            alert = _change_alert(item, context.get("previous"))
+            item["status_changed"] = alert is not None
+            if alert:
+                alerts.append(alert)
             items.append(item)
 
     signal_priority = {
@@ -613,10 +907,13 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
         reverse=True,
     )
     items = items[:MAX_RESULT_ITEMS]
+    now = dt.datetime.now()
+    _save_history(items, now)
+    alerts = alerts[:5]
 
     snapshot = {
         "category": "A股基金套利",
-        "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "status": "success",
         "message": "公开数据仅作筛选；执行前请以基金公告及银河证券申购页为准",
         "account": asdict(ACCOUNT_CAPACITY)
@@ -634,8 +931,10 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
             ),
             "need_verification": sum(item["signal"] == "verify" for item in items),
             "watching": sum(item["signal"] == "watch" for item in items),
+            "status_changes": len(alerts),
             "elapsed_ms": round((time.time() - started) * 1000),
         },
+        "alerts": alerts,
         "items": items,
     }
     _cache_set("snapshot:last-success", snapshot)
