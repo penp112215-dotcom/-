@@ -7,10 +7,10 @@
     <text class="updated">{{updatedAt}}</text>
   </view>
 
-  <view class="ai-status {{ai.configured ? 'ai-ready' : ''}}">
+  <view class="ai-status {{aiClass}}">
     <view class="ai-dot"></view>
     <view class="ai-copy">
-      <text class="ai-title">{{ai.configured ? ai.provider + ' · ' + ai.model : 'AI服务待配置'}}</text>
+      <text class="ai-title">{{aiTitle}}</text>
       <text class="ai-desc">{{ai.message}}</text>
     </view>
   </view>
@@ -21,7 +21,7 @@
   </view>
 
   <view wx:if="{{loading}}" class="state">正在读取全球市场</view>
-  <view wx:elif="{{error && indices.length === 0}}" class="state state-error">{{error}}</view>
+  <view wx:elif="{{showIndexError}}" class="state state-error">{{error}}</view>
   <view wx:else class="index-grid">
     <view class="index-card" wx:for="{{indices}}" wx:key="code">
       <text class="index-name">{{item.name}}</text>
@@ -63,9 +63,9 @@
       confirm-type="search"
       bindconfirm="onSearch"
     />
-    <view class="search-button" bindtap="onSearch">{{searching ? '搜索中' : '搜索'}}</view>
+    <view class="search-button" bindtap="onSearch">搜索</view>
   </view>
-  <text class="search-message {{searching ? 'search-message-active' : ''}}">{{searchMessage}}</text>
+  <text class="search-message">{{searchMessage}}</text>
 
   <view class="search-results" wx:if="{{searchItems.length}}">
     <view
@@ -188,7 +188,7 @@
       <view class="document-row" wx:for="{{dossier.reports.items}}" wx:key="url" data-url="{{item.url}}" bindtap="onOpenSource">
         <view class="document-main">
           <text class="document-title">{{item.title}}</text>
-          <text class="document-meta">{{item.date}} · {{item.organization}} · {{item.rating || '未评级'}}</text>
+          <text class="document-meta">{{item.date}} · {{item.organization}} · {{item.ratingText}}</text>
         </view>
         <text class="document-link">原文</text>
       </view>
@@ -217,7 +217,7 @@
   <view class="note-editor">
     <input class="note-title-input" value="{{noteTitle}}" placeholder="标题（可选）" bindinput="onNoteTitleInput" />
     <textarea class="note-content-input" value="{{noteContent}}" placeholder="记录观点、依据和需要继续验证的问题" maxlength="50000" bindinput="onNoteContentInput"></textarea>
-    <view class="save-note" bindtap="onSaveNote">{{savingNote ? '保存中' : '保存记录'}}</view>
+    <view class="save-note" bindtap="onSaveNote">保存记录</view>
   </view>
 
   <view class="note-list" wx:if="{{notes.length}}">
@@ -225,7 +225,7 @@
       <view class="note-card-head">
         <view>
           <text class="note-card-title">{{item.title}}</text>
-          <text class="note-meta">{{item.symbol || '综合研究'}} · {{item.updated_at}}</text>
+          <text class="note-meta">{{item.symbolText}} · {{item.updated_at}}</text>
         </view>
         <text class="delete-note" data-id="{{item.id}}" bindtap="onDeleteNote">删除</text>
       </view>

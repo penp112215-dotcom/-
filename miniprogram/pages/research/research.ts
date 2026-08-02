@@ -45,6 +45,7 @@ interface ResearchNote {
   symbol: string
   note_type: string
   updated_at: string
+  symbolText?: string
 }
 
 interface ResearchTask {
@@ -168,7 +169,18 @@ function displayDossier(item: ResearchDossier): any {
       superLargeNetText: moneyText(flow.super_large_net),
       mainNetCls: Number(flow.main_net || 0) >= 0 ? 'flow-value rise' : 'flow-value fall',
     },
+    reports: {
+      ...(item.reports || {}),
+      items: ((item.reports || {}).items || []).map((report: any) => ({
+        ...report,
+        ratingText: report.rating || '未评级',
+      })),
+    },
   }
+}
+
+function displayNote(note: ResearchNote): ResearchNote {
+  return { ...note, symbolText: note.symbol || '综合研究' }
 }
 
 Page({
@@ -178,6 +190,9 @@ Page({
     updatedAt: '--',
     indices: [] as DisplayIndex[],
     ai: EMPTY_AI,
+    aiClass: '',
+    aiTitle: 'AI服务待配置',
+    showIndexError: false,
     query: '',
     searching: false,
     searchMessage: '输入股票名称或代码，停止输入后会自动搜索',
@@ -212,19 +227,23 @@ Page({
   },
 
   loadOverview(): Promise<void> {
-    this.setData({ loading: true, error: '' })
+    this.setData({ loading: true, error: '', showIndexError: false })
     return request<any>(API_PATH.RESEARCH_OVERVIEW, { timeout: 20000 })
       .then((res) => {
+        const ai = res.ai || EMPTY_AI
         this.setData({
           indices: (res.indices || []).map(displayIndex),
-          ai: res.ai || EMPTY_AI,
+          ai,
+          aiClass: ai.configured ? 'ai-ready' : '',
+          aiTitle: ai.configured ? `${ai.provider} · ${ai.model}` : 'AI服务待配置',
           updatedAt: res.updated_at || '--',
           loading: false,
           error: res.status === 'partial' ? '部分市场数据暂不可用' : '',
+          showIndexError: false,
         })
       })
       .catch(() => {
-        this.setData({ loading: false, error: '无法连接AI投研服务' })
+        this.setData({ loading: false, error: '无法连接AI投研服务', showIndexError: true })
       })
   },
 
@@ -415,7 +434,7 @@ Page({
 
   loadNotes(): Promise<void> {
     return request<any>(API_PATH.RESEARCH_NOTES, { timeout: 10000 })
-      .then((res) => this.setData({ notes: res.items || [] }))
+      .then((res) => this.setData({ notes: (res.items || []).map(displayNote) }))
       .catch(() => undefined)
   },
 

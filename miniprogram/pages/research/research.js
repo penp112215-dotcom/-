@@ -81,7 +81,17 @@ function displayDossier(item) {
             superLargeNetText: moneyText(flow.super_large_net),
             mainNetCls: Number(flow.main_net || 0) >= 0 ? 'flow-value rise' : 'flow-value fall',
         },
+        reports: {
+            ...(item.reports || {}),
+            items: ((item.reports || {}).items || []).map((report) => ({
+                ...report,
+                ratingText: report.rating || '未评级',
+            })),
+        },
     };
+}
+function displayNote(note) {
+    return { ...note, symbolText: note.symbol || '综合研究' };
 }
 Page({
     data: {
@@ -90,6 +100,9 @@ Page({
         updatedAt: '--',
         indices: [],
         ai: EMPTY_AI,
+        aiClass: '',
+        aiTitle: 'AI服务待配置',
+        showIndexError: false,
         query: '',
         searching: false,
         searchMessage: '输入股票名称或代码，停止输入后会自动搜索',
@@ -122,19 +135,23 @@ Page({
             .finally(() => wx.stopPullDownRefresh());
     },
     loadOverview() {
-        this.setData({ loading: true, error: '' });
+        this.setData({ loading: true, error: '', showIndexError: false });
         return (0, api_1.request)(api_1.API_PATH.RESEARCH_OVERVIEW, { timeout: 20000 })
             .then((res) => {
+            const ai = res.ai || EMPTY_AI;
             this.setData({
                 indices: (res.indices || []).map(displayIndex),
-                ai: res.ai || EMPTY_AI,
+                ai,
+                aiClass: ai.configured ? 'ai-ready' : '',
+                aiTitle: ai.configured ? `${ai.provider} · ${ai.model}` : 'AI服务待配置',
                 updatedAt: res.updated_at || '--',
                 loading: false,
                 error: res.status === 'partial' ? '部分市场数据暂不可用' : '',
+                showIndexError: false,
             });
         })
             .catch(() => {
-            this.setData({ loading: false, error: '无法连接AI投研服务' });
+            this.setData({ loading: false, error: '无法连接AI投研服务', showIndexError: true });
         });
     },
     onQueryInput(e) {
@@ -319,7 +336,7 @@ Page({
     },
     loadNotes() {
         return (0, api_1.request)(api_1.API_PATH.RESEARCH_NOTES, { timeout: 10000 })
-            .then((res) => this.setData({ notes: res.items || [] }))
+            .then((res) => this.setData({ notes: (res.items || []).map(displayNote) }))
             .catch(() => undefined);
     },
     onSaveNote() {
