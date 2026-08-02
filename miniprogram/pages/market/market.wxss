@@ -1,9 +1,58 @@
-page { background: #090b10; color: #f4f7fb; }
-.page { min-height: 100vh; padding: 40rpx 28rpx; box-sizing: border-box; }
-.hero { margin-bottom: 34rpx; }.eyebrow,.label,.source,.source-small { color: #8190a5; font-size: 20rpx; letter-spacing: 2rpx; }
-.title { display: block; font-size: 54rpx; font-weight: 800; margin: 10rpx 0; }.updated { color: #718096; font-size: 22rpx; }
-.sentiment-card,.asset-card { background: #121722; border: 1rpx solid #263147; border-radius: 20rpx; box-sizing: border-box; }
-.sentiment-card { padding: 30rpx; margin-bottom: 42rpx; background: linear-gradient(135deg,#17294a,#141824); }
-.score-row { display: flex; align-items: baseline; margin: 12rpx 0; }.score { color: #55d8ff; font-size: 84rpx; font-weight: 800; }.score-total { color: #718096; font-size: 28rpx; }
-.classification { display: block; font-size: 30rpx; font-weight: 600; margin-bottom: 14rpx; }.section-title { color: #b8c5d8; font-size: 28rpx; font-weight: 700; margin-bottom: 18rpx; }
-.asset-card { display: flex; justify-content: space-between; align-items: center; padding: 26rpx; margin-bottom: 16rpx; }.symbol { display:block; font-size: 34rpx; font-weight: 800; }.asset-name { color: #718096; font-size: 22rpx; }.right { display:flex; flex-direction:column; align-items:flex-end; gap:4rpx; }.price { font-size: 31rpx; font-weight: 700; }.rise { color:#ff6262; }.fall { color:#49d17d; }.empty { color:#718096; text-align:center; padding:80rpx 0; }
+page { background: #090c12; color: #f4f7fb; }
+.page { min-height: 100vh; padding: 34rpx 26rpx; box-sizing: border-box; }
+.hero { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 25rpx; }
+.eyebrow,.card-kicker { display: block; color: #6f819b; font-size: 17rpx; letter-spacing: 2rpx; }
+.title { display: block; margin-top: 7rpx; font-size: 46rpx; font-weight: 850; }
+.updated { color: #657289; font-size: 17rpx; }
+.loading-card,.error-card,.empty { padding: 30rpx 20rpx; border-radius: 16rpx; background: #111722; color: #8290a5; font-size: 20rpx; text-align: center; }
+.error-card { color: #ff8585; }
+.sentiment-card,.retail-card,.sector-list,.crypto-fear-card,.crypto-card { border: 1rpx solid #253044; background: #121823; }
+.sentiment-card { padding: 27rpx; border-radius: 21rpx; background: linear-gradient(145deg,#172b4f,#131924 62%); }
+.card-head,.score-line,.section-head,.retail-card,.sector-row,.crypto-fear-card,.crypto-top,.crypto-bottom { display: flex; justify-content: space-between; align-items: center; }
+.card-caption { display: block; margin-top: 5rpx; color: #7e8da3; font-size: 16rpx; }
+.sample-tag { padding: 7rpx 11rpx; border-radius: 999rpx; background: rgba(67,132,255,.15); color: #8eb7ff; font-size: 16rpx; }
+.score-line { justify-content: flex-start; gap: 20rpx; margin-top: 19rpx; }
+.main-score { color: #5dd8ff; font-size: 78rpx; font-weight: 850; line-height: 1; }
+.score-copy { display: flex; flex-direction: column; }
+.score-label { font-size: 28rpx; font-weight: 750; }
+.score-scale { margin-top: 5rpx; color: #738198; font-size: 16rpx; }
+.gauge,.mini-track { overflow: hidden; border-radius: 999rpx; background: #263047; }
+.gauge { height: 9rpx; margin-top: 20rpx; }
+.gauge-fill,.mini-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg,#43d38e,#ffd459,#ff6b72); }
+.summary { display: block; margin-top: 18rpx; color: #aeb9c9; font-size: 18rpx; line-height: 1.55; }
+.section-head { align-items: flex-end; margin: 33rpx 3rpx 15rpx; }
+.section-title { font-size: 27rpx; font-weight: 800; }
+.section-note { max-width: 66%; color: #6f7d91; font-size: 15rpx; line-height: 1.4; text-align: right; }
+.indicator-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12rpx; }
+.indicator-card { min-width: 0; padding: 19rpx; border: 1rpx solid #222c3e; border-radius: 16rpx; background: #101620; }
+.indicator-name { display: block; color: #8390a3; font-size: 17rpx; }
+.indicator-value { display: block; margin-top: 8rpx; font-size: 23rpx; font-weight: 750; }
+.mini-track { height: 5rpx; margin-top: 13rpx; }
+.mini-fill { background: #3a83f7; }
+.indicator-note { display: block; margin-top: 8rpx; color: #626f82; font-size: 14rpx; }
+.retail-card { padding: 20rpx; border-radius: 18rpx 18rpx 0 0; }
+.retail-score-box,.retail-metric { display: flex; flex-direction: column; align-items: center; }
+.retail-score { color: #ffc95c; font-size: 44rpx; font-weight: 850; }
+.retail-label,.retail-name { margin-top: 4rpx; color: #7c899d; font-size: 15rpx; }
+.retail-value { font-size: 26rpx; font-weight: 800; }
+.buy-color { color: #ff7272; }.sell-color { color: #51d48c; }
+.sector-list { border-top: 0; border-radius: 0 0 18rpx 18rpx; }
+.sector-row { padding: 16rpx 20rpx; }
+.sector-row + .sector-row { border-top: 1rpx solid #202a3a; }
+.sector-name { display: block; font-size: 20rpx; font-weight: 700; }
+.sector-sample,.sector-label { display: block; margin-top: 4rpx; color: #6c798d; font-size: 14rpx; }
+.sector-right { text-align: right; }.sector-index { font-size: 22rpx; font-weight: 800; }
+.method-note { display: block; margin: 10rpx 4rpx 0; color: #59677a; font-size: 14rpx; line-height: 1.5; }
+.crypto-head { margin-top: 38rpx; }
+.crypto-fear-card { padding: 20rpx; border-radius: 17rpx; }
+.crypto-status { display: block; margin-top: 8rpx; font-size: 21rpx; font-weight: 700; }
+.crypto-fear-right { text-align: right; }.crypto-fear-score { display: block; color: #5dd8ff; font-size: 42rpx; font-weight: 850; }
+.crypto-source { display: block; color: #67758a; font-size: 14rpx; }
+.crypto-list { margin-top: 12rpx; }
+.crypto-card { margin-bottom: 12rpx; padding: 21rpx; border-radius: 17rpx; }
+.crypto-symbol { display: block; font-size: 25rpx; font-weight: 850; }.crypto-name { color: #65748a; font-size: 15rpx; }
+.crypto-change { font-size: 20rpx; font-weight: 750; }.rise { color:#ff6969; }.fall { color:#4bd28a; }
+.crypto-price { display: block; margin: 13rpx 0; font-size: 32rpx; font-weight: 800; }
+.crypto-bottom { color: #68768b; font-size: 14rpx; }
+.disclaimer { margin-top: 28rpx; padding: 18rpx; color: #566377; font-size: 15rpx; line-height: 1.55; text-align: center; }
+.footer-space { height: 45rpx; }

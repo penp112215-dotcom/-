@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from arbitrage_engine import build_arbitrage_snapshot, get_arbitrage_history
+from market_sentiment import get_market_sentiment
 from research_engine import (
     create_note,
     create_research_task,
@@ -62,6 +63,7 @@ FALLBACK_US = {
 
 FALLBACK_CRYPTO = {
     "BTCUSDT": {"symbol": "BTCUSDT", "name": "Bitcoin", "price": 104000.0, "change_pct_24h": 0.0, "high_24h": 105000.0, "low_24h": 102000.0, "quote_volume_24h": 0.0},
+    "ETHUSDT": {"symbol": "ETHUSDT", "name": "Ethereum", "price": 3500.0, "change_pct_24h": 0.0, "high_24h": 3600.0, "low_24h": 3400.0, "quote_volume_24h": 0.0},
     "SOLUSDT": {"symbol": "SOLUSDT", "name": "Solana", "price": 150.0, "change_pct_24h": 0.0, "high_24h": 155.0, "low_24h": 145.0, "quote_volume_24h": 0.0},
 }
 
@@ -530,9 +532,10 @@ def _fetch_crypto_ticker(symbol: str) -> dict | None:
         return None
     try:
         d = resp.json()
+        names = {"BTCUSDT": "Bitcoin", "ETHUSDT": "Ethereum", "SOLUSDT": "Solana"}
         return {
             "symbol": symbol,
-            "name": "Bitcoin" if symbol == "BTCUSDT" else "Solana",
+            "name": names.get(symbol, symbol),
             "price": float(d["lastPrice"]),
             "change_pct_24h": float(d["priceChangePercent"]),
             "high_24h": float(d["highPrice"]),
@@ -544,10 +547,13 @@ def _fetch_crypto_ticker(symbol: str) -> dict | None:
 
 
 def _crypto_assets() -> list[dict]:
-    """统一输出 BTC / SOL；每项独立降级并标明来源。"""
+    """统一输出 BTC / ETH / SOL；每项独立降级并标明来源。"""
     assets = []
-    for symbol in ("BTCUSDT", "SOLUSDT"):
-        ticker = _fetch_crypto_ticker(symbol)
+    symbols = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        tickers = dict(zip(symbols, pool.map(_fetch_crypto_ticker, symbols)))
+    for symbol in symbols:
+        ticker = tickers.get(symbol)
         if ticker and ticker.get("price") is not None:
             ticker["source"] = "live"
         else:
@@ -613,16 +619,25 @@ def portfolio(symbols: str = "") -> dict[str, Any]:
 
 @app.get("/api/market")
 def market() -> dict[str, Any]:
-    """市场总览：BTC/SOL 行情与恐慌贪婪指数，供首页和告警引擎使用。"""
-    fear_greed = _fetch_fear_greed()
+    """市场总览：A股复合情绪、散户热度、加密恐贪与三币行情。"""
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        sentiment_future = pool.submit(get_market_sentiment)
+        crypto_future = pool.submit(_crypto_assets)
+        fear_future = pool.submit(_fetch_fear_greed)
+        sentiment = sentiment_future.result()
+        crypto_assets = crypto_future.result()
+        fear_greed = fear_future.result()
     value = fear_greed["value"]
     risk_level = "极度恐慌" if value <= 25 else "恐慌" if value <= 45 else "中性" if value <= 55 else "贪婪" if value <= 75 else "极度贪婪"
     return {
         "category": "全球市场情绪",
         "updated_at": _now(),
-        "crypto_assets": _crypto_assets(),
+        "crypto_assets": crypto_assets,
         "fear_greed": fear_greed,
         "risk_level": risk_level,
+        "a_share_sentiment": sentiment.get("a_share", {}),
+        "retail_sentiment": sentiment.get("retail", {}),
+        "sentiment_updated_at": sentiment.get("updated_at", ""),
     }
 
 

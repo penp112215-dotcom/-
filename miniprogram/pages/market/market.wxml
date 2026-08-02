@@ -1,26 +1,87 @@
 <view class="page">
   <view class="hero">
-    <text class="eyebrow">GLOBAL RISK MONITOR</text>
-    <text class="title">市场情绪</text>
-    <text class="updated">更新于 {{updatedAt}}</text>
-  </view>
-
-  <view class="sentiment-card">
-    <text class="label">CRYPTO FEAR &amp; GREED</text>
-    <view class="score-row"><text class="score">{{value}}</text><text class="score-total">/100</text></view>
-    <text class="classification">{{classification}} · {{riskLevel}}</text>
-    <text class="source">{{isLive ? '实时数据' : '演示/缓存数据'}}</text>
-  </view>
-
-  <view class="section-title">加密资产</view>
-  <block wx:if="{{loading}}">
-    <view class="empty">数据同步中…</view>
-  </block>
-  <block wx:else>
-    <view wx:for="{{assets}}" wx:key="symbol" class="asset-card">
-      <view><text class="symbol">{{item.symbol}}</text><text class="asset-name">{{item.name}}</text></view>
-      <view class="right"><text class="price">{{item.priceText}}</text><text class="{{item.changeCls}}">{{item.changeText}}</text><text class="source-small">{{item.sourceText}}</text></view>
+    <view>
+      <text class="eyebrow">MARKET SENTIMENT</text>
+      <text class="title">市场情绪</text>
     </view>
-  </block>
-  <view wx:if="{{!loading && assets.length === 0}}" class="empty">暂无可用行情</view>
+    <text class="updated">{{updatedAt}}</text>
+  </view>
+
+  <view class="loading-card" wx:if="{{loading}}">正在汇总 A 股、散户讨论与加密市场…</view>
+  <view class="error-card" wx:if="{{error}}">{{error}}</view>
+
+  <view class="sentiment-card" wx:if="{{hasAShare}}">
+    <view class="card-head">
+      <view>
+        <text class="card-kicker">A股复合情绪</text>
+        <text class="card-caption">客观市场行为 · 0—100</text>
+      </view>
+      <text class="sample-tag">{{aSample}}只样本</text>
+    </view>
+    <view class="score-line">
+      <text class="main-score">{{aScore}}</text>
+      <view class="score-copy">
+        <text class="score-label">{{aLabel}}</text>
+        <text class="score-scale">50 为中性</text>
+      </view>
+    </view>
+    <view class="gauge"><view class="gauge-fill" style="width: {{aScoreWidth}}%"></view></view>
+    <text class="summary">{{aSummary}}</text>
+  </view>
+
+  <view class="section-head" wx:if="{{hasAShare}}">
+    <text class="section-title">情绪拆解</text>
+    <text class="section-note">{{aMethod}}</text>
+  </view>
+  <view class="indicator-grid" wx:if="{{hasAShare}}">
+    <view class="indicator-card" wx:for="{{components}}" wx:key="key">
+      <text class="indicator-name">{{item.name}}</text>
+      <text class="indicator-value">{{item.display}}</text>
+      <view class="mini-track"><view class="mini-fill" style="width: {{item.barWidth}}%"></view></view>
+      <text class="indicator-note">{{item.note}}</text>
+    </view>
+  </view>
+
+  <view class="section-head">
+    <text class="section-title">散户反向情绪</text>
+    <text class="section-note">公开讨论热度，仅作辅助观察</text>
+  </view>
+  <view class="retail-card" wx:if="{{hasRetail}}">
+    <view class="retail-score-box">
+      <text class="retail-score">{{retailIndex}}</text>
+      <text class="retail-label">{{retailLabel}}</text>
+    </view>
+    <view class="retail-metric"><text class="retail-value buy-color">{{retailBuy}}</text><text class="retail-name">追涨强度</text></view>
+    <view class="retail-metric"><text class="retail-value sell-color">{{retailSell}}</text><text class="retail-name">恐慌强度</text></view>
+  </view>
+  <view class="sector-list" wx:if="{{hasRetail}}">
+    <view class="sector-row" wx:for="{{sectors}}" wx:key="key">
+      <view><text class="sector-name">{{item.name}}</text><text class="sector-sample">{{item.sample_size}}条样本</text></view>
+      <view class="sector-right"><text class="sector-index">{{item.indexText}}</text><text class="sector-label">{{item.label}}</text></view>
+    </view>
+  </view>
+  <text class="method-note" wx:if="{{hasRetail}}">共 {{retailSample}} 条公开标题 · {{retailMethod}}</text>
+
+  <view class="section-head crypto-head">
+    <text class="section-title">加密市场</text>
+    <text class="section-note">BTC · ETH · SOL 每日监控</text>
+  </view>
+  <view class="crypto-fear-card">
+    <view><text class="card-kicker">CRYPTO FEAR &amp; GREED</text><text class="crypto-status">{{cryptoLabel}} · {{cryptoRisk}}</text></view>
+    <view class="crypto-fear-right"><text class="crypto-fear-score">{{cryptoFear}}</text><text class="crypto-source">{{cryptoSource}}</text></view>
+  </view>
+  <view class="crypto-list">
+    <view class="crypto-card" wx:for="{{assets}}" wx:key="symbol">
+      <view class="crypto-top">
+        <view><text class="crypto-symbol">{{item.symbol}}</text><text class="crypto-name">{{item.name}}</text></view>
+        <text class="{{item.changeCls}}">{{item.changeText}}</text>
+      </view>
+      <text class="crypto-price">{{item.priceText}}</text>
+      <view class="crypto-bottom"><text>24H {{item.rangeText}}</text><text>{{item.sourceText}}</text></view>
+    </view>
+  </view>
+  <view class="empty" wx:if="{{showCryptoEmpty}}">暂无可用加密行情</view>
+
+  <view class="disclaimer">情绪指标用于描述市场状态，不预测涨跌，不构成投资建议。公开讨论指标可能受样本偏差和关键词误判影响。</view>
+  <view class="footer-space"></view>
 </view>
