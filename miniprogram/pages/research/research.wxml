@@ -195,7 +195,7 @@
     </view>
 
     <view class="missing-data" wx:if="{{dossier.hasMissingData}}">
-      缺失项目会在AI分析中标记为“数据不足”，不会推测补全。
+      缺失项目会在AI分析中标记为“数据不足”,不会推测补全。
     </view>
   </view>
 
@@ -204,7 +204,7 @@
       <text class="task-title">{{activeTask.title}}</text>
       <text class="task-progress">{{activeTask.progress}}%</text>
     </view>
-    <view class="progress-track"><view class="progress-value" style="width: {{activeTask.progress}}%"></view></view>
+    <view class="progress-track"><view class="progress-value" style="{{activeTask.progressStyle}}"></view></view>
     <text class="task-stage">{{activeTask.stage}}</text>
     <text class="task-error" wx:if="{{activeTask.error}}">{{activeTask.error}}</text>
     <text class="task-result" wx:if="{{activeTask.result}}">{{activeTask.result}}</text>

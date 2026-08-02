@@ -15,7 +15,7 @@ interface ComponentDisplay {
   name: string
   display: string
   note: string
-  barWidth: number
+  barStyle: string
 }
 
 function numberOf(value: unknown): number | null {
@@ -50,7 +50,7 @@ function toComponents(items: Record<string, any>[]): ComponentDisplay[] {
     name: String(item.name || '--'),
     display: String(item.display || '--'),
     note: String(item.note || ''),
-    barWidth: Math.max(0, Math.min(100, Number(item.value || 0))),
+    barStyle: `width: ${Math.max(0, Math.min(100, Number(item.value || 0)))}%;`,
   }))
 }
 
@@ -74,7 +74,7 @@ Page({
     aSummary: '',
     aMethod: '',
     aSample: 0,
-    aScoreWidth: 0,
+    aScoreStyle: 'width: 0%;',
     components: [] as ComponentDisplay[],
     hasRetail: false,
     retailIndex: '--',
@@ -126,7 +126,7 @@ Page({
           aSummary: aShare.summary || '客观数据不足，暂不生成情绪结论。',
           aMethod: aShare.method || '',
           aSample: Number(aShare.sample_size || 0),
-          aScoreWidth: score == null ? 0 : Math.max(0, Math.min(100, score)),
+          aScoreStyle: `width: ${score == null ? 0 : Math.max(0, Math.min(100, score))}%;`,
           components: toComponents(aShare.components || []),
           hasRetail: Boolean(retail.available),
           retailIndex: retail.index == null ? '--' : Number(retail.index).toFixed(1),

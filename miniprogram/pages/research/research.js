@@ -94,6 +94,10 @@ function displayDossier(item) {
 function displayNote(note) {
     return { ...note, symbolText: note.symbol || '综合研究' };
 }
+function displayTask(task) {
+    const progress = Math.max(0, Math.min(100, Number(task.progress || 0)));
+    return { ...task, progressStyle: `width: ${progress}%;` };
+}
 Page({
     data: {
         loading: true,
@@ -304,7 +308,7 @@ Page({
             timeout: 15000,
         })
             .then((task) => {
-            this.setData({ activeTask: task });
+            this.setData({ activeTask: displayTask(task) });
             this.startTaskPolling(task.id);
         })
             .catch(() => wx.showToast({ title: '任务创建失败', icon: 'none' }))
@@ -317,7 +321,7 @@ Page({
         const poll = () => {
             (0, api_1.request)(`${api_1.API_PATH.RESEARCH_TASKS}/${taskId}`, { timeout: 10000 })
                 .then((task) => {
-                this.setData({ activeTask: task });
+                this.setData({ activeTask: displayTask(task) });
                 if (['completed', 'failed', 'needs_config'].includes(task.status)) {
                     const timer = this._taskTimer;
                     if (timer)

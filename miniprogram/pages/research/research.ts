@@ -56,6 +56,7 @@ interface ResearchTask {
   stage: string
   result: string
   error: string
+  progressStyle?: string
 }
 
 interface ResearchDossier {
@@ -182,6 +183,11 @@ function displayDossier(item: ResearchDossier): any {
 
 function displayNote(note: ResearchNote): ResearchNote {
   return { ...note, symbolText: note.symbol || '综合研究' }
+}
+
+function displayTask(task: ResearchTask): ResearchTask {
+  const progress = Math.max(0, Math.min(100, Number(task.progress || 0)))
+  return { ...task, progressStyle: `width: ${progress}%;` }
 }
 
 Page({
@@ -400,7 +406,7 @@ Page({
       timeout: 15000,
     })
       .then((task) => {
-        this.setData({ activeTask: task })
+        this.setData({ activeTask: displayTask(task) })
         this.startTaskPolling(task.id)
       })
       .catch(() => wx.showToast({ title: '任务创建失败', icon: 'none' }))
@@ -413,7 +419,7 @@ Page({
     const poll = () => {
       request<ResearchTask>(`${API_PATH.RESEARCH_TASKS}/${taskId}`, { timeout: 10000 })
         .then((task) => {
-          this.setData({ activeTask: task })
+          this.setData({ activeTask: displayTask(task) })
           if (['completed', 'failed', 'needs_config'].includes(task.status)) {
             const timer = (this as any)._taskTimer
             if (timer) clearInterval(timer)

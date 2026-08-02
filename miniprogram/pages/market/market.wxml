@@ -25,7 +25,7 @@
         <text class="score-scale">50 为中性</text>
       </view>
     </view>
-    <view class="gauge"><view class="gauge-fill" style="width: {{aScoreWidth}}%"></view></view>
+    <view class="gauge"><view class="gauge-fill" style="{{aScoreStyle}}"></view></view>
     <text class="summary">{{aSummary}}</text>
   </view>
 
@@ -37,7 +37,7 @@
     <view class="indicator-card" wx:for="{{components}}" wx:key="key">
       <text class="indicator-name">{{item.name}}</text>
       <text class="indicator-value">{{item.display}}</text>
-      <view class="mini-track"><view class="mini-fill" style="width: {{item.barWidth}}%"></view></view>
+      <view class="mini-track"><view class="mini-fill" style="{{item.barStyle}}"></view></view>
       <text class="indicator-note">{{item.note}}</text>
     </view>
   </view>
