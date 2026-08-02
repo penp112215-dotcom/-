@@ -1,46 +1,46 @@
 <view class="page">
-  <view class="bg-grid"></view>
-  <view class="bg-glow"></view>
-
   <view class="header">
-    <text class="title">NEWS NOW</text>
-    <view class="subtitle">全网实时投资快讯 <text class="time-badge">更新: {{updatedAt}}</text></view>
+    <view>
+      <text class="eyebrow">DAILY FRONTIER</text>
+      <text class="title">前沿资讯</text>
+      <text class="subtitle">科技 · AI · 政治</text>
+    </view>
+    <view class="date-box"><text class="date">{{date}}</text><text class="updated">{{updatedAt}}</text></view>
   </view>
 
-  <scroll-view scroll-x class="tab-bar" scroll-with-animation>
-    <view 
-      class="tab-item {{activeTab === item ? 'tab-active' : ''}}" 
-      wx:for="{{tabs}}" 
-      wx:key="item"
-      bindtap="onTabSelect"
-      data-tab="{{item}}"
-    >
-      {{item}}
+  <view class="digest-card" wx:if="{{dailySummary}}">
+    <text class="digest-label">今日汇总</text>
+    <text class="digest-copy">{{dailySummary}}</text>
+  </view>
+
+  <scroll-view scroll-x class="tab-bar" enable-flex>
+    <view class="{{item.tabClass}}" wx:for="{{channels}}" wx:key="key" bindtap="onTabSelect" data-key="{{item.key}}">
+      <text class="tab-name">{{item.name}}</text>
+      <text class="tab-count">{{item.count}}</text>
     </view>
   </scroll-view>
 
-  <scroll-view scroll-y class="list-container">
-    <view class="news-timeline">
-      
-      <view class="card-wrapper" wx:for="{{currentNews}}" wx:key="index">
-        <view class="time-node">
-          <view class="node-dot"></view>
-          <text class="node-time">{{item.time}}</text>
-        </view>
-        
-        <view class="news-card">
-          <view class="news-title">{{item.title}}</view>
-          <view class="card-footer">
-            <text class="source-tag">{{activeTab}}</text>
-            <view class="action-hint">⚡ LIVE</view>
-          </view>
-        </view>
-      </view>
+  <view class="channel-head">
+    <text class="channel-title">{{activeName}}资讯</text>
+    <text class="channel-description">{{activeDescription}}</text>
+  </view>
 
-      <view class="empty-tip" wx:if="{{currentNews.length === 0 && !loading}}">
-        暂无该通道实时资讯
-      </view>
+  <view class="state" wx:if="{{loading}}">正在同步最新资讯…</view>
+  <view class="state state-error" wx:if="{{error}}">{{error}}</view>
 
+  <view class="news-list">
+    <view class="news-card" wx:for="{{currentNews}}" wx:key="url">
+      <view class="news-meta"><text class="source-tag">{{item.source}}</text><text class="news-time">{{item.time}}</text></view>
+      <text class="news-title">{{item.title}}</text>
+      <text class="news-summary" wx:if="{{item.expanded}}">{{item.summary}}</text>
+      <view class="card-actions">
+        <text class="summary-action" wx:if="{{item.hasSummary}}" bindtap="onToggleSummary" data-index="{{index}}">查看/收起摘要</text>
+        <text class="source-action" bindtap="onCopySource" data-url="{{item.url}}">复制原文链接</text>
+      </view>
     </view>
-  </scroll-view>
+  </view>
+
+  <view class="state" wx:if="{{showEmpty}}">当前频道暂无可用资讯</view>
+  <text class="disclaimer" wx:if="{{disclaimer}}">{{disclaimer}}</text>
+  <view class="footer-space"></view>
 </view>

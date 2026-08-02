@@ -1,125 +1,25 @@
-.page {
-  background-color: #0d1117;
-  min-height: 100vh;
-  padding: 24rpx;
-  box-sizing: border-box;
-  position: relative;
-  overflow: hidden;
-}
-
-.bg-grid {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-  background-size: 40rpx 40rpx;
-  z-index: 0; pointer-events: none;
-}
-
-.header {
-  position: relative; z-index: 1; margin-bottom: 24rpx; padding-left: 8rpx;
-}
-
-.title {
-  color: #f0f6fc; font-size: 44rpx; font-weight: 800; letter-spacing: 2rpx; font-family: monospace;
-}
-
-.subtitle {
-  color: #8b949e; font-size: 22rpx; margin-top: 8rpx; display: flex; align-items: center;
-}
-
-.time-badge {
-  color: #58a6ff; background: rgba(56, 139, 253, 0.15); padding: 2rpx 10rpx; border-radius: 6rpx; margin-left: 16rpx; font-size: 18rpx;
-}
-
-/* 💎 横向滑动导航栏样式 */
-.tab-bar {
-  white-space: nowrap;
-  width: 100%;
-  height: 80rpx;
-  position: relative; z-index: 1;
-  margin-bottom: 24rpx;
-  border-bottom: 1px solid #21262d;
-}
-
-.tab-item {
-  display: inline-block;
-  padding: 0 32rpx;
-  height: 76rpx;
-  line-height: 76rpx;
-  color: #8b949e;
-  font-size: 28rpx;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.tab-active {
-  color: #58a6ff;
-  font-weight: bold;
-  border-bottom: 4rpx solid #58a6ff;
-  font-size: 30rpx;
-}
-
-/* 时间线列表布局 */
-.list-container {
-  position: relative; z-index: 1; height: calc(100vh - 240rpx);
-}
-
-.news-timeline {
-  padding-left: 20rpx;
-  position: relative;
-}
-/* 左侧时间线中轴虚线 */
-.news-timeline::before {
-  content: ''; position: absolute; top: 10rpx; left: 30rpx; bottom: 0;
-  width: 2rpx; background: #30363d;
-}
-
-.card-wrapper {
-  margin-bottom: 32rpx;
-  position: relative;
-}
-
-/* 时间轴节点 */
-.time-node {
-  display: flex; align-items: center; margin-bottom: 12rpx; position: relative; z-index: 2;
-}
-
-.node-dot {
-  width: 12rpx; height: 12rpx; background: #58a6ff; border-radius: 50%;
-  margin-left: 5rpx; margin-right: 20rpx;
-  box-shadow: 0 0 12rpx #58a6ff;
-}
-
-.node-time {
-  color: #8b949e; font-size: 22rpx; font-family: monospace;
-}
-
-/* 新闻暗黑卡片样式 */
-.news-card {
-  background-color: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 12rpx;
-  padding: 24rpx;
-  margin-left: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.15);
-}
-
-.news-title {
-  color: #e6edf3; font-size: 28rpx; line-height: 1.6; font-weight: 400;
-}
-
-.card-footer {
-  display: flex; justify-content: space-between; align-items: center; margin-top: 20rpx; padding-top: 16rpx; border-top: 1px solid #21262d;
-}
-
-.source-tag {
-  color: #58a6ff; font-size: 20rpx; background: rgba(88, 166, 255, 0.1); padding: 4rpx 12rpx; border-radius: 6rpx; border: 1px solid rgba(88,166,255,0.2);
-}
-
-.action-hint {
-  color: #2ea043; font-size: 18rpx; font-weight: bold; letter-spacing: 1rpx;
-}
-
-.empty-tip {
-  color: #8b949e; text-align: center; font-size: 26rpx; padding-top: 100rpx;
-}
+page { background: #f4f6fa; color: #172033; }
+.page { min-height: 100vh; padding: 34rpx 26rpx; box-sizing: border-box; }
+.header { display: flex; justify-content: space-between; align-items: flex-end; }
+.eyebrow { display: block; color: #3475df; font-size: 16rpx; font-weight: 750; letter-spacing: 2rpx; }
+.title { display: block; margin-top: 6rpx; font-size: 46rpx; font-weight: 850; }
+.subtitle { display: block; margin-top: 5rpx; color: #7c8798; font-size: 19rpx; }
+.date-box { text-align: right; }.date { display: block; font-size: 19rpx; font-weight: 700; }.updated { display: block; margin-top: 5rpx; color: #9aa3b0; font-size: 14rpx; }
+.digest-card { margin-top: 22rpx; padding: 19rpx 21rpx; border: 1rpx solid #dce7fa; border-radius: 16rpx; background: #edf4ff; }
+.digest-label { display: block; color: #2e6ed2; font-size: 16rpx; font-weight: 750; }.digest-copy { display: block; margin-top: 5rpx; color: #52647d; font-size: 18rpx; line-height: 1.5; }
+.tab-bar { width: 100%; margin-top: 23rpx; white-space: nowrap; }
+.tab-item { display: inline-flex; align-items: center; gap: 8rpx; margin-right: 10rpx; padding: 15rpx 21rpx; border: 1rpx solid #e0e4eb; border-radius: 999rpx; background: #fff; color: #738095; }
+.tab-active { border-color: #2d6fe0; background: #2d6fe0; color: #fff; }
+.tab-name { font-size: 21rpx; font-weight: 750; }.tab-count { min-width: 27rpx; height: 27rpx; border-radius: 999rpx; background: rgba(128,142,165,.16); font-size: 14rpx; line-height: 27rpx; text-align: center; }
+.tab-active .tab-count { background: rgba(255,255,255,.2); }
+.channel-head { margin: 28rpx 3rpx 14rpx; }.channel-title { display: block; font-size: 27rpx; font-weight: 820; }.channel-description { display: block; margin-top: 5rpx; color: #8a94a4; font-size: 16rpx; }
+.news-card { margin-bottom: 13rpx; padding: 21rpx; border: 1rpx solid #e2e6ed; border-radius: 17rpx; background: #fff; box-shadow: 0 5rpx 18rpx rgba(26,39,61,.035); }
+.news-meta,.card-actions { display: flex; justify-content: space-between; align-items: center; }
+.source-tag { max-width: 70%; overflow: hidden; color: #2f72dc; font-size: 16rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }.news-time { color: #9ba4b2; font-size: 15rpx; }
+.news-title { display: block; margin-top: 13rpx; color: #253146; font-size: 22rpx; font-weight: 700; line-height: 1.55; }
+.news-summary { display: block; margin-top: 13rpx; padding: 14rpx; border-radius: 10rpx; background: #f6f8fb; color: #667286; font-size: 18rpx; line-height: 1.55; }
+.card-actions { justify-content: flex-end; gap: 25rpx; margin-top: 15rpx; padding-top: 13rpx; border-top: 1rpx solid #eef1f5; }
+.summary-action { color: #778499; font-size: 16rpx; }.source-action { color: #2f72dc; font-size: 16rpx; font-weight: 700; }
+.state { padding: 70rpx 20rpx; color: #8d97a6; font-size: 20rpx; text-align: center; }.state-error { color: #cf5959; }
+.disclaimer { display: block; margin-top: 24rpx; padding: 0 16rpx; color: #9ba4b0; font-size: 15rpx; line-height: 1.55; text-align: center; }
+.footer-space { height: 45rpx; }

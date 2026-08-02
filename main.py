@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from arbitrage_engine import build_arbitrage_snapshot, get_arbitrage_history
 from market_sentiment import get_market_sentiment
+from news_engine import fetch_daily_news
 from research_engine import (
     create_note,
     create_research_task,
@@ -644,56 +645,10 @@ def market() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # 3. 资讯聚合接口
 # ---------------------------------------------------------------------------
-import httpx
-
-# 假设未来 Docker 里的 newsnow 运行在本地 3000 端口
-NEWSNOW_API_URL = "http://127.0.0.1:3000/api/news"
-
 @app.get("/api/news")
-async def get_all_news():
-    try:
-        # 使用 httpx 去白嫖本地 Docker 抓好的全量新鲜数据 (设置 2 秒超时，防止卡死)
-        async with httpx.AsyncClient() as client:
-            response = await client.get(NEWSNOW_API_URL, timeout=2.0)
-            
-        if response.status_code == 200:
-            raw_data = response.json()
-            # 完美承接 newsnow 返回的各大源数据
-            return {
-                "status": "success",
-                "sources": raw_data.get("sources", {}), 
-                "updated_at": raw_data.get("updatedAt", "刚刚")
-            }
-    except Exception as e:
-        print(f"Docker newsnow 服务未启动或连接失败，已自动切入硬核兜底模式")
-        
-    # 【完美兜底机制】当你本地没跑 Docker 时，绝对不白屏，依然展示硬核演示数据
-    return {
-        "status": "fallback",
-        "updated_at": "演示模式",
-        "sources": {
-            "华尔街见闻": [
-                {"title": "美联储偏爱的通胀指标超预期降温，降息大门正式敞开", "time": "2分钟前", "url": ""},
-                {"title": "英伟达盘前大涨 4%，分析师集体调高目标价至新高", "time": "15分钟前", "url": ""}
-            ],
-            "36氪": [
-                {"title": "大模型独角兽完成新一轮巨额融资，估值突破百亿美金", "time": "5分钟前", "url": ""},
-                {"title": "消费电子巨头入局自动驾驶，首款极客网格新车谍照曝光", "time": "1小时前", "url": ""}
-            ],
-            "财联社": [
-                {"title": "A股半天成交额破万亿，机器人ETF、核心资产全线爆发", "time": "刚刚", "url": ""},
-                {"title": "多部门联合发文：加大对数字经济与自动化工具的政策红利", "time": "30分钟前", "url": ""}
-            ],
-            "AIHOT": [
-                {"title": "OpenAI 秘密项目曝光：具备完全自主流式推理的智能 Agent 军团", "time": "10分钟前", "url": ""},
-                {"title": "GitHub 开源自动化 RPA 框架爆火，一键托管全平台评论管理", "time": "45分钟前", "url": ""}
-            ],
-            "IT之家": [
-                {"title": "极客掌上调试终端发布：内置定制 Ubuntu 核心，续航长达一整天", "time": "12分钟前", "url": ""},
-                {"title": "最新指纹浏览器内核升级：重构 WebRTC 防穿透伪装隔离机制", "time": "3小时前", "url": ""}
-            ]
-        }
-    }
+def get_all_news(force: bool = False) -> dict[str, Any]:
+    """科技、AI、政治三个频道的每日最新资讯。"""
+    return fetch_daily_news(force=force)
 
 
 # ---------------------------------------------------------------------------
