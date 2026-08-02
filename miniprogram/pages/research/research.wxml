@@ -194,7 +194,7 @@
       </view>
     </view>
 
-    <view class="missing-data" wx:if="{{dossier.completeness.available < dossier.completeness.total}}">
+    <view class="missing-data" wx:if="{{dossier.hasMissingData}}">
       缺失项目会在AI分析中标记为“数据不足”，不会推测补全。
     </view>
   </view>

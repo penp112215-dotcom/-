@@ -55,6 +55,7 @@ function displayDossier(item) {
     const flow = (item.fund_flow || {}).latest || {};
     return {
         ...item,
+        hasMissingData: Number(item.completeness.available || 0) < Number(item.completeness.total || 0),
         valuation: {
             ...(item.valuation || {}),
             peText: numberText((item.valuation || {}).pe),
