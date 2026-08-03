@@ -11,7 +11,10 @@
 from __future__ import annotations
 
 import datetime as _dt
+import email.utils
+import html
 import re
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -208,10 +211,10 @@ def research_task(task_id: str) -> dict[str, Any]:
 def _fetch_us_stock(secid: str) -> dict | None:
     """东方财富美股行情：secid 形如 105.MSFT"""
     url = (
-        "http://push2.eastmoney.com/api/qt/stock/get"
+        "https://push2.eastmoney.com/api/qt/stock/get"
         f"?secid={secid}&fields=f43,f57,f58,f60,f169,f170&fltt=2"
     )
-    resp = _safe_get(url)
+    resp = _safe_get(url, timeout=4)
     if not resp:
         return None
     try:
@@ -224,6 +227,42 @@ def _fetch_us_stock(secid: str) -> dict | None:
         }
     except (ValueError, KeyError):
         return None
+
+
+def _fetch_eastmoney_quote(symbol: str) -> dict | None:
+    """Yahoo 不可达时使用东方财富公开美股行情；不返回模拟价格。"""
+    for market, exchange in (("105", "US"), ("106", "NYSE"), ("107", "AMEX")):
+        row = _fetch_us_stock(f"{market}.{symbol}")
+        if not row or row.get("price") in (None, "-", 0, 0.0):
+            continue
+        try:
+            price = round(float(row["price"]), 4)
+            preclose_raw = row.get("preclose")
+            preclose = (
+                round(float(preclose_raw), 4)
+                if preclose_raw not in (None, "-", 0, 0.0)
+                else None
+            )
+            change_raw = row.get("change_pct")
+            change_pct = (
+                round(float(change_raw), 3)
+                if change_raw not in (None, "-")
+                else None
+            )
+        except (TypeError, ValueError):
+            continue
+        return {
+            "symbol": symbol,
+            "name": str(row.get("name") or symbol),
+            "price": price,
+            "preclose": preclose,
+            "change_pct": change_pct,
+            "currency": "USD",
+            "exchange": exchange,
+            "market_time": None,
+            "source": "eastmoney",
+        }
+    return None
 
 
 _YAHOO_HEADERS = {
@@ -450,6 +489,59 @@ def _fetch_yahoo_news(symbol: str, limit: int = 10) -> list[dict]:
     return result
 
 
+def _fetch_bing_chinese_news(symbol: str, limit: int = 10) -> list[dict]:
+    """Yahoo 新闻不可达时，从 Bing RSS 提取中文且可溯源的相关新闻。"""
+    resp = _safe_get(
+        "https://www.bing.com/news/search",
+        headers=_YAHOO_HEADERS,
+        timeout=10,
+        params={
+            "q": f"{symbol} 美股 最新消息",
+            "format": "rss",
+            "setlang": "zh-cn",
+            "cc": "cn",
+        },
+    )
+    if not resp:
+        return []
+    try:
+        root = ET.fromstring(resp.content)
+    except ET.ParseError:
+        return []
+
+    result: list[dict] = []
+    seen: set[str] = set()
+    for item in root.findall(".//item"):
+        title = html.unescape(str(item.findtext("title") or "")).strip()
+        link = str(item.findtext("link") or "").strip()
+        if not title or not link or not _has_chinese(title):
+            continue
+        dedupe_key = re.sub(r"\W+", "", title).lower()
+        if not dedupe_key or dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        source = str(item.findtext("source") or "Bing 新闻").strip()
+        published_raw = str(item.findtext("pubDate") or "").strip()
+        try:
+            published = email.utils.parsedate_to_datetime(published_raw)
+            published_text = published.astimezone().strftime("%m-%d %H:%M")
+        except (TypeError, ValueError, OverflowError):
+            published_text = ""
+        result.append(
+            {
+                "title": title,
+                "original_title": title,
+                "publisher": source,
+                "published_at": published_text,
+                "url": link,
+                "impact_label": "中文关联",
+            }
+        )
+        if len(result) >= limit:
+            break
+    return result
+
+
 def _search_us_stocks(query: str) -> list[dict]:
     query = str(query or "").strip()[:50]
     if not query:
@@ -507,8 +599,10 @@ def _search_us_stocks(query: str) -> list[dict]:
 
 
 def _build_portfolio_stock(symbol: str) -> dict:
-    quote = _fetch_yahoo_quote(symbol)
+    quote = _fetch_yahoo_quote(symbol) or _fetch_eastmoney_quote(symbol)
     news = _fetch_yahoo_news(symbol)
+    if not news:
+        news = _fetch_bing_chinese_news(symbol)
     if quote:
         quote["news"] = news
         return quote
