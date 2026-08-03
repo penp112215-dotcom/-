@@ -38,11 +38,15 @@ FEEDS = (
     FeedSource("technology", "IT之家", "https://www.ithome.com/rss/"),
     FeedSource("technology", "Solidot", "https://www.solidot.org/index.rss"),
     FeedSource("technology", "科技新闻聚合", _google_url("科技 OR 半导体 OR 芯片 OR 机器人")),
+    FeedSource("ai", "36氪 AI筛选", "https://36kr.com/feed"),
+    FeedSource("ai", "IT之家 AI筛选", "https://www.ithome.com/rss/"),
     FeedSource("ai", "AI中文新闻聚合", _google_url("大模型 OR OpenAI OR Anthropic OR DeepMind OR 生成式AI OR AI智能体")),
     FeedSource("ai", "OpenAI 官方", "https://openai.com/news/rss.xml"),
     FeedSource("ai", "Google DeepMind", "https://deepmind.google/blog/rss.xml"),
     FeedSource("politics", "政治新闻聚合", _google_url("国际政治 OR 外交 OR 地缘政治 OR 国际关系")),
     FeedSource("politics", "BBC 中文", "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml"),
+    FeedSource("politics", "中国新闻网国际", "https://www.chinanews.com.cn/rss/world.xml"),
+    FeedSource("politics", "人民网国际", "http://www.people.com.cn/rss/world.xml"),
 )
 
 CHANNELS = (
