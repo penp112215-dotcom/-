@@ -139,7 +139,7 @@ const PRODUCTION_API_BASE_URL = 'https://api.penp15.cn'
 npx.cmd tsc
 ```
 
-微信开发者工具里的开发版仍使用 `http://127.0.0.1:8000`；体验版和正式版会自动切换到 HTTPS 地址。
+微信开发者工具模拟器使用 `http://127.0.0.1:8000`；手机预览、体验版和正式版都会自动切换到 HTTPS 地址。
 
 ## 9. 微信公众平台配置
 

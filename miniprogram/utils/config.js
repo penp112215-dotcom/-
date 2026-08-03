@@ -8,14 +8,15 @@ exports.API_BASE_URL = void 0;
 const LOCAL_API_BASE_URL = 'http://127.0.0.1:8000';
 // 部署 VPS 后只替换这一项；体验版和正式版都会自动使用 HTTPS 地址。
 const PRODUCTION_API_BASE_URL = 'https://api.penp15.cn';
-function currentEnvironment() {
+function isDeveloperTools() {
     try {
-        return wx.getAccountInfoSync().miniProgram.envVersion || 'develop';
+        return wx.getSystemInfoSync().platform === 'devtools';
     }
     catch (error) {
-        return 'develop';
+        return false;
     }
 }
-exports.API_BASE_URL = currentEnvironment() === 'develop'
+// 开发者工具模拟器连接本机；预览、体验版和正式版真机全部连接 VPS。
+exports.API_BASE_URL = isDeveloperTools()
     ? LOCAL_API_BASE_URL
     : PRODUCTION_API_BASE_URL;
