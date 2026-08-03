@@ -6,7 +6,7 @@
 ## 0. 上线前必须准备
 
 1. 一个自己可管理的域名，例如 `example.com`。
-2. 一个 API 子域名，例如 `api.example.com`，A 记录指向 `1.14.200.232`。
+2. API 子域名 `api.penp15.cn`，A 记录指向 `1.14.200.232`。
 3. 确认域名满足腾讯云大陆服务器和微信小程序的备案/接入要求。
 4. 微信公众平台中当前小程序的管理员权限。
 5. VPS SSH 登录权限，推荐密钥登录，不要通过聊天发送密码。
@@ -93,7 +93,7 @@ sudo journalctl -u miniapp-api -f
 
 ## 6. 配置 Nginx
 
-先把模板中的 `api.example.com` 全部替换为真实 API 域名：
+模板已经配置为 `api.penp15.cn`：
 
 ```bash
 sudo cp /opt/miniapp/deploy/nginx-miniapp.conf /etc/nginx/conf.d/miniapp-api.conf
@@ -105,16 +105,16 @@ sudo systemctl reload nginx
 确认 DNS 已生效：
 
 ```bash
-getent hosts api.example.com
-curl http://api.example.com/health
+getent hosts api.penp15.cn
+curl http://api.penp15.cn/health
 ```
 
 ## 7. 申请 HTTPS 证书
 
 ```bash
-sudo certbot --nginx -d api.example.com --redirect
+sudo certbot --nginx -d api.penp15.cn --redirect
 sudo certbot renew --dry-run
-curl https://api.example.com/health
+curl https://api.penp15.cn/health
 ```
 
 HTTPS 健康检查必须返回 `{"status":"ok"}`，浏览器不得出现证书警告。
@@ -130,7 +130,7 @@ miniprogram/utils/config.ts
 把：
 
 ```ts
-const PRODUCTION_API_BASE_URL = 'https://api.example.com'
+const PRODUCTION_API_BASE_URL = 'https://api.penp15.cn'
 ```
 
 替换为真实域名，然后执行：
@@ -145,7 +145,7 @@ npx.cmd tsc
 
 1. 登录 `https://mp.weixin.qq.com/`。
 2. 进入开发管理/开发设置中的服务器域名。
-3. 在 `request 合法域名` 添加 `https://api.example.com`，不要带路径和端口。
+3. 在 `request 合法域名` 添加 `https://api.penp15.cn`，不要带路径和端口。
 4. 在微信开发者工具切换到“不忽略合法域名校验”的模式重新测试。
 5. 使用真机预览逐页验证五个板块。
 
@@ -179,7 +179,7 @@ sudo -u miniapp git pull --ff-only origin main
 sudo -u miniapp /opt/miniapp/.venv/bin/pip install -r requirements.txt
 sudo systemctl restart miniapp-api
 curl http://127.0.0.1:8000/health
-curl https://api.example.com/health
+curl https://api.penp15.cn/health
 ```
 
 数据库位于 `/opt/miniapp/data/`，更新代码时不要删除。备份示例：

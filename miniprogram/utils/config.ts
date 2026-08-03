@@ -5,7 +5,7 @@
 const LOCAL_API_BASE_URL = 'http://127.0.0.1:8000'
 
 // 部署 VPS 后只替换这一项；体验版和正式版都会自动使用 HTTPS 地址。
-const PRODUCTION_API_BASE_URL = 'https://api.example.com'
+const PRODUCTION_API_BASE_URL = 'https://api.penp15.cn'
 
 function currentEnvironment(): string {
   try {
