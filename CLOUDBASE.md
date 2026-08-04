@@ -33,7 +33,7 @@ curl http://1.14.200.232:8080/health
 在腾讯云开发 CloudBase 控制台进入“AnyService”，选择“新建服务接入”：
 
 - 服务名称：`小程序 VPS 后端`
-- 服务标识：`miniapp_vps`
+- 服务标识：`miniappvps`
 - 源站类型：`通过公网访问源站`
 - 源站协议：`HTTP`
 - 源站连接信息：`1.14.200.232:8080`
@@ -45,7 +45,7 @@ AnyService 服务所在环境必须与小程序 `wx.cloud.init` 使用的环境 
 重新编译并上传体验版。真机请求会携带：
 
 - `X-WX-SERVICE: tcbanyservice`
-- `X-AnyService-Name: miniapp_vps`
+- `X-AnyService-Name: miniappvps`
 
 不需要在微信公众平台添加 `api.penp15.cn` 为 request 合法域名。
 

@@ -8,7 +8,7 @@ const LOCAL_API_BASE_URL = 'http://127.0.0.1:8000'
 export const CLOUDBASE_ENV_ID = 'cloud1-d7gdt868jed18e21e'
 
 /** CloudBase AnyService 控制台中的“服务标识”。 */
-export const ANYSERVICE_NAME = 'miniapp_vps'
+export const ANYSERVICE_NAME = 'miniappvps'
 
 /** 设为 true 时开发者工具才连接本机；默认所有环境都使用 CloudBase。 */
 export const USE_LOCAL_API_IN_DEVTOOLS = false
