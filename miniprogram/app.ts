@@ -1,7 +1,22 @@
 // app.ts
+import { CLOUDBASE_ENV_ID, isDeveloperTools } from './utils/config'
+
 App<IAppOption>({
   globalData: {},
   onLaunch() {
+    if (!isDeveloperTools()) {
+      if (!CLOUDBASE_ENV_ID) {
+        console.error('[CloudBase] 尚未配置环境 ID')
+      } else if (wx.cloud) {
+        wx.cloud.init({
+          env: CLOUDBASE_ENV_ID,
+          traceUser: true,
+        })
+      } else {
+        console.error('[CloudBase] 当前微信基础库不支持 wx.cloud')
+      }
+    }
+
     // 展示本地存储能力
     const logs = wx.getStorageSync('logs') || []
     logs.unshift(Date.now())

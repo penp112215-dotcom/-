@@ -1,7 +1,6 @@
 "use strict";
 // api.ts
-// 本地数据引擎请求封装。后端服务地址：http://127.0.0.1:8000
-// 注意：开发期需在微信开发者工具「详情 → 本地设置」勾选「不校验合法域名」。
+// 开发者工具走本机 HTTP；预览、体验版和真机走 CloudBase AnyService 私有链路。
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.api = exports.API_PATH = void 0;
 exports.request = request;
@@ -37,11 +36,49 @@ function parseResponseBody(data) {
     }
     return data;
 }
-/** 通用请求，resolve 的即为后端 JSON 根对象 */
-function request(path, options = {}) {
+function requestThroughCloudBase(path, options) {
+    if (!config_1.CLOUDBASE_ENV_ID) {
+        return Promise.reject({
+            errMsg: 'CloudBase 环境 ID 尚未配置',
+            path,
+        });
+    }
+    const cloud = wx.cloud;
+    if (!cloud || !cloud.callContainer) {
+        return Promise.reject({
+            errMsg: '当前微信基础库不支持 CloudBase',
+            path,
+        });
+    }
+    console.log('[CloudBase请求]', path);
+    return cloud.callContainer({
+        config: { env: config_1.CLOUDBASE_ENV_ID },
+        path,
+        method: options.method || 'GET',
+        data: options.data,
+        header: {
+            'X-WX-SERVICE': 'tcbanyservice',
+            'X-AnyService-Name': config_1.ANYSERVICE_NAME,
+            'content-type': 'application/json',
+            ...(options.header || {}),
+        },
+        timeout: options.timeout || 120000,
+    }).then((res) => {
+        const statusCode = Number(res.statusCode || 0);
+        console.log('[CloudBase返回]', path, res.data, 'status:', statusCode);
+        if (statusCode >= 400) {
+            return Promise.reject({ statusCode, data: res.data, path });
+        }
+        return parseResponseBody(res.data);
+    }).catch((error) => {
+        console.error('[CloudBase失败]', path, error);
+        return Promise.reject(error);
+    });
+}
+function requestLocally(path, options) {
     const url = path.startsWith('http') ? path : BASE_URL + path;
     return new Promise((resolve, reject) => {
-        console.log('[API请求]', url);
+        console.log('[本地API请求]', url);
         wx.request({
             url,
             method: options.method || 'GET',
@@ -50,21 +87,26 @@ function request(path, options = {}) {
             timeout: options.timeout || 120000,
             dataType: 'json',
             success: (res) => {
-                console.log('[API返回]', url, res.data, 'status:', res.statusCode);
                 const statusCode = res.statusCode || 0;
+                console.log('[本地API返回]', url, res.data, 'status:', statusCode);
                 if (statusCode >= 400) {
                     reject({ statusCode, data: res.data, url });
                     return;
                 }
-                const body = parseResponseBody(res.data);
-                resolve(body);
+                resolve(parseResponseBody(res.data));
             },
-            fail: (err) => {
-                console.error('[API失败]', url, err);
-                reject(err);
+            fail: (error) => {
+                console.error('[本地API失败]', url, error);
+                reject(error);
             },
         });
     });
+}
+/** 通用请求，resolve 的即为后端 JSON 根对象 */
+function request(path, options = {}) {
+    return (0, config_1.isDeveloperTools)()
+        ? requestLocally(path, options)
+        : requestThroughCloudBase(path, options);
 }
 /** 便捷方法（路径与 API_PATH 一一对应，不可互换） */
 exports.api = {

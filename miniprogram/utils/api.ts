@@ -1,8 +1,12 @@
 // api.ts
-// 本地数据引擎请求封装。后端服务地址：http://127.0.0.1:8000
-// 注意：开发期需在微信开发者工具「详情 → 本地设置」勾选「不校验合法域名」。
+// 开发者工具走本机 HTTP；预览、体验版和真机走 CloudBase AnyService 私有链路。
 
-import { API_BASE_URL } from './config'
+import {
+  ANYSERVICE_NAME,
+  API_BASE_URL,
+  CLOUDBASE_ENV_ID,
+  isDeveloperTools,
+} from './config'
 
 const BASE_URL = API_BASE_URL
 
@@ -46,14 +50,57 @@ function parseResponseBody(data: any): any {
   return data
 }
 
-/** 通用请求，resolve 的即为后端 JSON 根对象 */
-export function request<T = Record<string, any>>(
+function requestThroughCloudBase<T>(
   path: string,
-  options: RequestOptions = {}
+  options: RequestOptions
+): Promise<T> {
+  if (!CLOUDBASE_ENV_ID) {
+    return Promise.reject({
+      errMsg: 'CloudBase 环境 ID 尚未配置',
+      path,
+    })
+  }
+  const cloud = wx.cloud as any
+  if (!cloud || !cloud.callContainer) {
+    return Promise.reject({
+      errMsg: '当前微信基础库不支持 CloudBase',
+      path,
+    })
+  }
+
+  console.log('[CloudBase请求]', path)
+  return cloud.callContainer({
+    config: { env: CLOUDBASE_ENV_ID },
+    path,
+    method: options.method || 'GET',
+    data: options.data,
+    header: {
+      'X-WX-SERVICE': 'tcbanyservice',
+      'X-AnyService-Name': ANYSERVICE_NAME,
+      'content-type': 'application/json',
+      ...(options.header || {}),
+    },
+    timeout: options.timeout || 120000,
+  } as any).then((res: any) => {
+    const statusCode = Number(res.statusCode || 0)
+    console.log('[CloudBase返回]', path, res.data, 'status:', statusCode)
+    if (statusCode >= 400) {
+      return Promise.reject({ statusCode, data: res.data, path })
+    }
+    return parseResponseBody(res.data) as T
+  }).catch((error: any) => {
+    console.error('[CloudBase失败]', path, error)
+    return Promise.reject(error)
+  })
+}
+
+function requestLocally<T>(
+  path: string,
+  options: RequestOptions
 ): Promise<T> {
   const url = path.startsWith('http') ? path : BASE_URL + path
   return new Promise<T>((resolve, reject) => {
-    console.log('[API请求]', url)
+    console.log('[本地API请求]', url)
     wx.request({
       url,
       method: options.method || 'GET',
@@ -62,21 +109,30 @@ export function request<T = Record<string, any>>(
       timeout: options.timeout || 120000,
       dataType: 'json',
       success: (res) => {
-        console.log('[API返回]', url, res.data, 'status:', res.statusCode)
         const statusCode = res.statusCode || 0
+        console.log('[本地API返回]', url, res.data, 'status:', statusCode)
         if (statusCode >= 400) {
           reject({ statusCode, data: res.data, url })
           return
         }
-        const body = parseResponseBody(res.data) as T
-        resolve(body)
+        resolve(parseResponseBody(res.data) as T)
       },
-      fail: (err) => {
-        console.error('[API失败]', url, err)
-        reject(err)
+      fail: (error) => {
+        console.error('[本地API失败]', url, error)
+        reject(error)
       },
     })
   })
+}
+
+/** 通用请求，resolve 的即为后端 JSON 根对象 */
+export function request<T = Record<string, any>>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  return isDeveloperTools()
+    ? requestLocally<T>(path, options)
+    : requestThroughCloudBase<T>(path, options)
 }
 
 /** 便捷方法（路径与 API_PATH 一一对应，不可互换） */
