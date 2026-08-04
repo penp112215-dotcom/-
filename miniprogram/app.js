@@ -5,7 +5,7 @@ const config_1 = require("./utils/config");
 App({
     globalData: {},
     onLaunch() {
-        if (!(0, config_1.isDeveloperTools)()) {
+        if ((0, config_1.shouldUseCloudBase)()) {
             if (!config_1.CLOUDBASE_ENV_ID) {
                 console.error('[CloudBase] 尚未配置环境 ID');
             }

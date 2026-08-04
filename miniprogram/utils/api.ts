@@ -5,7 +5,7 @@ import {
   ANYSERVICE_NAME,
   API_BASE_URL,
   CLOUDBASE_ENV_ID,
-  isDeveloperTools,
+  shouldUseCloudBase,
 } from './config'
 
 const BASE_URL = API_BASE_URL
@@ -130,9 +130,9 @@ export function request<T = Record<string, any>>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  return isDeveloperTools()
-    ? requestLocally<T>(path, options)
-    : requestThroughCloudBase<T>(path, options)
+  return shouldUseCloudBase()
+    ? requestThroughCloudBase<T>(path, options)
+    : requestLocally<T>(path, options)
 }
 
 /** 便捷方法（路径与 API_PATH 一一对应，不可互换） */

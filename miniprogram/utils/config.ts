@@ -10,6 +10,9 @@ export const CLOUDBASE_ENV_ID = 'cloud1-d7gdt868jed18e21e'
 /** CloudBase AnyService 控制台中的“服务标识”。 */
 export const ANYSERVICE_NAME = 'miniapp_vps'
 
+/** 设为 true 时开发者工具才连接本机；默认所有环境都使用 CloudBase。 */
+export const USE_LOCAL_API_IN_DEVTOOLS = false
+
 export function isDeveloperTools(): boolean {
   try {
     return wx.getSystemInfoSync().platform === 'devtools'
@@ -18,5 +21,9 @@ export function isDeveloperTools(): boolean {
   }
 }
 
-// 开发者工具模拟器继续连接本机；预览、体验版和真机通过 CloudBase AnyService。
+export function shouldUseCloudBase(): boolean {
+  return !isDeveloperTools() || !USE_LOCAL_API_IN_DEVTOOLS
+}
+
+// 仅在显式开启本机调试开关时使用。
 export const API_BASE_URL = LOCAL_API_BASE_URL

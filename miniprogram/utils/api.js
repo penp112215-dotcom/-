@@ -104,9 +104,9 @@ function requestLocally(path, options) {
 }
 /** 通用请求，resolve 的即为后端 JSON 根对象 */
 function request(path, options = {}) {
-    return (0, config_1.isDeveloperTools)()
-        ? requestLocally(path, options)
-        : requestThroughCloudBase(path, options);
+    return (0, config_1.shouldUseCloudBase)()
+        ? requestThroughCloudBase(path, options)
+        : requestLocally(path, options);
 }
 /** 便捷方法（路径与 API_PATH 一一对应，不可互换） */
 exports.api = {

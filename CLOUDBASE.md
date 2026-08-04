@@ -1,6 +1,6 @@
 # CloudBase AnyService 接入说明
 
-本项目在微信开发者工具模拟器中继续请求本机 `127.0.0.1:8000`；预览、体验版和真机使用 CloudBase AnyService 私有链路访问现有 VPS，不依赖自有域名。
+本项目默认在微信开发者工具、预览、体验版和真机中统一使用 CloudBase AnyService 私有链路访问现有 VPS，不依赖自有域名。需要调试本机 Python 服务时，可把 `miniprogram/utils/config.ts` 中的 `USE_LOCAL_API_IN_DEVTOOLS` 临时改为 `true`。
 
 ## 1. 创建并关联云开发环境
 
@@ -56,4 +56,3 @@ AnyService 服务所在环境必须与小程序 `wx.cloud.init` 使用的环境 
 ```powershell
 npx.cmd tsc
 ```
-

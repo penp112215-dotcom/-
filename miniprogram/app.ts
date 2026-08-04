@@ -1,10 +1,10 @@
 // app.ts
-import { CLOUDBASE_ENV_ID, isDeveloperTools } from './utils/config'
+import { CLOUDBASE_ENV_ID, shouldUseCloudBase } from './utils/config'
 
 App<IAppOption>({
   globalData: {},
   onLaunch() {
-    if (!isDeveloperTools()) {
+    if (shouldUseCloudBase()) {
       if (!CLOUDBASE_ENV_ID) {
         console.error('[CloudBase] 尚未配置环境 ID')
       } else if (wx.cloud) {
