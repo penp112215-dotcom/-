@@ -265,6 +265,46 @@ def _fetch_eastmoney_quote(symbol: str) -> dict | None:
     return None
 
 
+def _fetch_tencent_quote(symbol: str) -> dict | None:
+    """腾讯财经美股行情，作为 Yahoo 不可达时的大陆备用源。"""
+    resp = _safe_get(
+        "https://qt.gtimg.cn/q=us" + symbol,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://finance.qq.com/",
+        },
+        timeout=6,
+    )
+    if not resp:
+        return None
+    try:
+        text = resp.content.decode("gb18030", errors="ignore")
+        matched = re.search(r'="(.*)";?\s*$', text.strip())
+        if not matched:
+            return None
+        fields = matched.group(1).split("~")
+        if len(fields) < 33 or fields[0] != "200":
+            return None
+        price = float(fields[3])
+        preclose = float(fields[4]) if fields[4] else None
+        change_pct = float(fields[32]) if fields[32] else None
+        if price <= 0:
+            return None
+        return {
+            "symbol": symbol,
+            "name": fields[1] or symbol,
+            "price": round(price, 4),
+            "preclose": round(preclose, 4) if preclose else None,
+            "change_pct": round(change_pct, 3) if change_pct is not None else None,
+            "currency": fields[35] if len(fields) > 35 and fields[35] else "USD",
+            "exchange": "US",
+            "market_time": fields[30] if len(fields) > 30 else None,
+            "source": "tencent",
+        }
+    except (ValueError, IndexError, TypeError):
+        return None
+
+
 _YAHOO_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -599,7 +639,11 @@ def _search_us_stocks(query: str) -> list[dict]:
 
 
 def _build_portfolio_stock(symbol: str) -> dict:
-    quote = _fetch_yahoo_quote(symbol) or _fetch_eastmoney_quote(symbol)
+    quote = (
+        _fetch_yahoo_quote(symbol)
+        or _fetch_tencent_quote(symbol)
+        or _fetch_eastmoney_quote(symbol)
+    )
     news = _fetch_yahoo_news(symbol)
     if not news:
         news = _fetch_bing_chinese_news(symbol)

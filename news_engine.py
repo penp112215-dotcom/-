@@ -49,6 +49,24 @@ FEEDS = (
     FeedSource("politics", "人民网国际", "http://www.people.com.cn/rss/world.xml"),
 )
 
+# 移动端首屏优先使用大陆网络可快速访问的来源。Google News、OpenAI、
+# DeepMind 和 BBC 等跨境 RSS 在国内 VPS 上常触发长时间 DNS/连接等待，
+# 后续可由定时后台任务补充，不能阻塞 CloudBase 的同步请求。
+FAST_FEEDS = tuple(
+    feed
+    for feed in FEEDS
+    if feed.name
+    in {
+        "36氪",
+        "IT之家",
+        "Solidot",
+        "36氪 AI筛选",
+        "IT之家 AI筛选",
+        "中国新闻网国际",
+        "人民网国际",
+    }
+)
+
 CHANNELS = (
     {"key": "technology", "name": "科技", "description": "芯片、硬件、互联网与前沿产品"},
     {"key": "ai", "name": "AI", "description": "模型、研究、产品与产业动态"},
@@ -59,17 +77,18 @@ _cache: tuple[float, dict[str, Any]] | None = None
 _cache_lock = threading.Lock()
 
 
-def _fetch_bytes(url: str, timeout: int = 20) -> bytes:
-    for trust_env in (False, True):
-        session = requests.Session()
-        session.trust_env = trust_env
-        try:
-            response = session.get(url, headers=HEADERS, timeout=timeout)
-            response.raise_for_status()
-            if b"<rss" in response.content[:1000].lower() or b"<feed" in response.content[:1000].lower():
-                return response.content
-        except requests.RequestException:
-            continue
+def _fetch_bytes(url: str) -> bytes:
+    # CloudBase 网关不适合等待多个慢源。每个源只尝试一次，连接和读取分别限时；
+    # 失败源由其他 RSS 补位，成功结果缓存 5 分钟。
+    session = requests.Session()
+    session.trust_env = False
+    try:
+        response = session.get(url, headers=HEADERS, timeout=(2, 4))
+        response.raise_for_status()
+        if b"<rss" in response.content[:1000].lower() or b"<feed" in response.content[:1000].lower():
+            return response.content
+    except requests.RequestException:
+        pass
     return b""
 
 
@@ -194,8 +213,8 @@ def fetch_daily_news(force: bool = False) -> dict[str, Any]:
 
     collected: dict[str, list[dict[str, Any]]] = {item["key"]: [] for item in CHANNELS}
     source_status: list[dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = [executor.submit(_fetch_feed, feed) for feed in FEEDS]
+    with ThreadPoolExecutor(max_workers=len(FAST_FEEDS)) as executor:
+        futures = [executor.submit(_fetch_feed, feed) for feed in FAST_FEEDS]
         for future in as_completed(futures):
             try:
                 feed, items = future.result()
