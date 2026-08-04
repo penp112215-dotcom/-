@@ -1,5 +1,7 @@
 # 微信小程序 VPS 部署与正式发布
 
+> 历史方案说明：本文记录的是“备案域名 + HTTPS + `wx.request`”公开部署路线。由于项目已改为个人自用，当前实际入口已切换为 CloudBase AnyService。日常部署请优先阅读 `CLOUDBASE.md` 和 `PROJECT_0_TO_1.md`；本文仅保留作域名部署学习资料。
+
 适用环境：腾讯云广州 Ubuntu、2 核 CPU、2GB 内存、50GB 系统盘。后端使用
 `systemd + Python venv + Uvicorn + Nginx + HTTPS`，不使用 Docker，以节省内存。
 
