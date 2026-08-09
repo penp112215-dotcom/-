@@ -102,7 +102,7 @@
           <text class="fund-code">{{item.code}} · {{item.fund_type}}</text>
         </view>
         <view class="edge">
-          <text class="edge-label">预计净空间</text>
+          <text class="edge-label">保守净空间</text>
           <text class="{{item.edgeCls}}">{{item.netText}}</text>
         </view>
       </view>
@@ -156,6 +156,10 @@
         <view class="detail-row">
           <text class="detail-label">毛溢价</text>
           <text class="detail-value">{{item.grossText}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">费后理论空间</text>
+          <text class="detail-value">{{item.feeAdjustedText}}</text>
         </view>
         <view class="detail-row">
           <text class="detail-label">限额口径</text>

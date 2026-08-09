@@ -75,6 +75,39 @@ class ResearchEngineTest(unittest.TestCase):
         self.assertEqual(result["valuation"]["forward_pe"], 20.0)
         self.assertEqual(result["valuation"]["ratings"], {"买入": 1, "增持": 1})
 
+    def test_us_dossier_uses_finnhub_sections_when_configured(self):
+        snapshot = {
+            "status": "success",
+            "name": "Microsoft",
+            "symbol": "MSFT",
+            "pe": None,
+            "pb": None,
+            "source": "腾讯公开行情（备用）",
+        }
+        financials = {
+            "available": True,
+            "latest": {"roe": 30},
+            "metrics": {"pe": 28.0, "pb": 9.0},
+        }
+        filings = {"available": True, "items": [{"title": "10-Q"}]}
+        recommendations = {
+            "available": True,
+            "items": [{"forecast_pe": None, "rating": "买入占优"}],
+        }
+        with (
+            patch.object(research_engine, "FINNHUB_API_KEY", "server-secret"),
+            patch.object(research_engine, "fetch_asset_snapshot", return_value=snapshot),
+            patch.object(research_engine, "_fetch_us_financials", return_value=financials),
+            patch.object(research_engine, "_fetch_us_filings", return_value=filings),
+            patch.object(research_engine, "_fetch_us_recommendations", return_value=recommendations),
+        ):
+            result = research_engine.fetch_research_dossier("105.MSFT", force=True)
+
+        self.assertEqual(result["market_scope"], "美股增强底稿")
+        self.assertEqual(result["valuation"]["pe"], 28.0)
+        self.assertTrue(result["announcements"]["available"])
+        self.assertEqual(result["reports"]["items"][0]["rating"], "买入占优")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -45,12 +45,14 @@ interface ArbitrageItem {
   nav_label: string
   nav_date: string
   gross_premium_pct: number
+  fee_adjusted_edge_pct: number
   subscription_fee_pct: number
   sell_fee_pct: number
   slippage_pct: number
   safety_buffer_pct: number
   net_edge_pct: number
   subscription_status: string
+  subscription_state: string
   per_investor_limit: number
   published_per_investor_limit: number
   liquidity_capacity: number
@@ -82,6 +84,7 @@ interface DisplayItem extends ArbitrageItem {
   trendText: string
   trendCls: string
   grossText: string
+  feeAdjustedText: string
   netText: string
   perInvestorText: string
   capacityText: string
@@ -168,6 +171,7 @@ function toDisplay(item: ArbitrageItem): DisplayItem {
     trendText: trend == null ? '积累中' : percent(trend, true),
     trendCls: Number(trend || 0) > 0 ? 'trend trend-up' : 'trend',
     grossText: Number(item.gross_premium_pct || 0).toFixed(2) + '%',
+    feeAdjustedText: Number(item.fee_adjusted_edge_pct || 0).toFixed(2) + '%',
     netText: (positive ? '+' : '') + Number(item.net_edge_pct || 0).toFixed(2) + '%',
     perInvestorText: money(Number(item.per_investor_limit || 0)),
     capacityText: money(Number(item.total_capacity || 0)),
@@ -248,7 +252,11 @@ Page({
         const account = res.account || EMPTY_ACCOUNT
         const allItems = (res.items || [])
           .map(toDisplay)
-          .sort((a, b) => b.net_edge_pct - a.net_edge_pct)
+          .sort((a, b) => {
+            const aOpen = ['open', 'restricted'].includes(a.subscription_state) ? 1 : 0
+            const bOpen = ['open', 'restricted'].includes(b.subscription_state) ? 1 : 0
+            return bOpen - aOpen || b.net_edge_pct - a.net_edge_pct
+          })
         const activeFilter = this.data.activeFilter
         const items = filterItems(allItems, activeFilter)
         this.setData({

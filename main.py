@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime as _dt
 import email.utils
 import html
+import os
 import re
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -43,6 +44,7 @@ from research_engine import (
 # 全局配置
 # ---------------------------------------------------------------------------
 REQUEST_TIMEOUT = 6  # 单源请求超时（秒），抓不到就降级
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
 
 
 def _now() -> str:
@@ -529,6 +531,78 @@ def _fetch_yahoo_news(symbol: str, limit: int = 10) -> list[dict]:
     return result
 
 
+def _fetch_finnhub_news(symbol: str, limit: int = 10) -> list[dict]:
+    """正式数据源的公司新闻；未配置密钥时零成本跳过。"""
+    if not FINNHUB_API_KEY:
+        return []
+    today = _dt.date.today()
+    resp = _safe_get(
+        "https://finnhub.io/api/v1/company-news",
+        timeout=8,
+        params={
+            "symbol": symbol,
+            "from": str(today - _dt.timedelta(days=10)),
+            "to": str(today),
+            "token": FINNHUB_API_KEY,
+        },
+    )
+    if not resp:
+        return []
+    try:
+        rows = resp.json()
+    except ValueError:
+        return []
+    if not isinstance(rows, list):
+        return []
+    candidates = []
+    for row in rows:
+        title = str(row.get("headline") or "").strip()
+        url = str(row.get("url") or "").strip()
+        if not title or not url:
+            continue
+        candidates.append((row, title))
+        if len(candidates) >= limit:
+            break
+    translated = _translate_news_titles([title for _, title in candidates])
+    result = []
+    for (row, original_title), title in zip(candidates, translated):
+        if not title:
+            continue
+        try:
+            published = _dt.datetime.fromtimestamp(int(row.get("datetime") or 0)).strftime("%m-%d %H:%M")
+        except (TypeError, ValueError, OSError):
+            published = ""
+        result.append(
+            {
+                "title": title,
+                "original_title": original_title,
+                "publisher": str(row.get("source") or "Finnhub"),
+                "published_at": published,
+                "url": str(row.get("url") or ""),
+                "impact_label": "公司直接相关",
+                "source": "finnhub",
+            }
+        )
+    return result
+
+
+def _merge_stock_news(*groups: list[dict], limit: int = 10) -> list[dict]:
+    result: list[dict] = []
+    seen: set[str] = set()
+    for group in groups:
+        for row in group:
+            key = str(row.get("url") or "").strip().lower()
+            if not key:
+                key = re.sub(r"\W+", "", str(row.get("original_title") or row.get("title") or "")).lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result.append(row)
+            if len(result) >= limit:
+                return result
+    return result
+
+
 def _fetch_bing_chinese_news(symbol: str, limit: int = 10) -> list[dict]:
     """Yahoo 新闻不可达时，从 Bing RSS 提取中文且可溯源的相关新闻。"""
     resp = _safe_get(
@@ -644,9 +718,14 @@ def _build_portfolio_stock(symbol: str) -> dict:
         or _fetch_tencent_quote(symbol)
         or _fetch_eastmoney_quote(symbol)
     )
-    news = _fetch_yahoo_news(symbol)
-    if not news:
-        news = _fetch_bing_chinese_news(symbol)
+    official_news = _fetch_finnhub_news(symbol)
+    yahoo_news = _fetch_yahoo_news(symbol, limit=max(0, 10 - len(official_news)))
+    bing_news = []
+    if len(official_news) + len(yahoo_news) < 10:
+        bing_news = _fetch_bing_chinese_news(
+            symbol, limit=10 - len(official_news) - len(yahoo_news)
+        )
+    news = _merge_stock_news(official_news, yahoo_news, bing_news, limit=10)
     if quote:
         quote["news"] = news
         return quote

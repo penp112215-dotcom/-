@@ -34,6 +34,7 @@ AI_API_KEY = os.getenv("AI_API_KEY", "")
 AI_MODEL = os.getenv("AI_MODEL", "")
 AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "180"))
 AI_PROVIDER = os.getenv("AI_PROVIDER", "未配置")
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -382,6 +383,119 @@ def _a_secu_code(quote_code: str) -> tuple[str, str] | None:
     return None
 
 
+def _us_symbol(quote_code: str) -> str | None:
+    market_id, symbol = quote_code.split(".", 1)
+    if market_id in {"105", "106", "107"} and re.fullmatch(r"[A-Za-z0-9-]{1,15}", symbol):
+        return symbol.upper()
+    return None
+
+
+def _finnhub_json(path: str, *, params: dict[str, Any]) -> Any:
+    if not FINNHUB_API_KEY:
+        return None
+    payload = dict(params)
+    payload["token"] = FINNHUB_API_KEY
+    try:
+        response = requests.get(
+            f"https://finnhub.io/api/v1/{path.lstrip('/')}",
+            params=payload,
+            headers=HEADERS,
+            timeout=12,
+        )
+        if response.status_code == 200:
+            return response.json()
+    except (requests.RequestException, ValueError):
+        pass
+    return None
+
+
+def _fetch_us_financials(symbol: str) -> dict[str, Any]:
+    payload = _finnhub_json("stock/metric", params={"symbol": symbol, "metric": "all"}) or {}
+    metric = payload.get("metric") or {}
+    latest = {
+        "period": str(dt.date.today()),
+        "revenue": None,
+        "revenue_yoy": _number(metric.get("revenueGrowthTTMYoy")),
+        "net_profit": None,
+        "net_profit_yoy": _number(metric.get("netIncomeGrowthTTMYoy")),
+        "roe": _number(metric.get("roeTTM")),
+        "gross_margin": _number(metric.get("grossMarginTTM")),
+        "net_margin": _number(metric.get("netProfitMarginTTM")),
+        "debt_ratio": _number(metric.get("totalDebt/totalAssetsAnnual")),
+    }
+    return {
+        "available": bool(metric),
+        "latest": latest,
+        "history": [],
+        "metrics": {
+            "pe": _number(metric.get("peTTM")),
+            "pb": _number(metric.get("pbAnnual")),
+            "market_cap": _number(metric.get("marketCapitalization")),
+            "beta": _number(metric.get("beta")),
+            "week_52_high": _number(metric.get("52WeekHigh")),
+            "week_52_low": _number(metric.get("52WeekLow")),
+        },
+        "source_name": "Finnhub 美股基础财务",
+        "source_url": f"https://finnhub.io/stock/{symbol}",
+    }
+
+
+def _fetch_us_filings(symbol: str) -> dict[str, Any]:
+    today = dt.date.today()
+    rows = _finnhub_json(
+        "stock/filings",
+        params={
+            "symbol": symbol,
+            "from": str(today - dt.timedelta(days=730)),
+            "to": str(today),
+        },
+    ) or []
+    items = []
+    for raw in rows[:10] if isinstance(rows, list) else []:
+        form = str(raw.get("form") or "SEC filing")
+        items.append(
+            {
+                "title": f"{form} · {str(raw.get('filedDate') or raw.get('filingDate') or '')[:10]}",
+                "date": str(raw.get("filedDate") or raw.get("filingDate") or "")[:10],
+                "type": form,
+                "url": str(raw.get("reportUrl") or raw.get("filingUrl") or ""),
+            }
+        )
+    return {
+        "available": bool(items),
+        "items": items,
+        "source_name": "SEC 公司申报（Finnhub 索引）",
+        "source_url": f"https://www.sec.gov/edgar/search/#/q={symbol}",
+    }
+
+
+def _fetch_us_recommendations(symbol: str) -> dict[str, Any]:
+    rows = _finnhub_json("stock/recommendation", params={"symbol": symbol}) or []
+    items = []
+    for raw in rows[:6] if isinstance(rows, list) else []:
+        buy = int(_number(raw.get("strongBuy")) or 0) + int(_number(raw.get("buy")) or 0)
+        hold = int(_number(raw.get("hold")) or 0)
+        sell = int(_number(raw.get("sell")) or 0) + int(_number(raw.get("strongSell")) or 0)
+        rating = "买入占优" if buy > max(hold, sell) else "持有占优" if hold >= sell else "卖出占优"
+        items.append(
+            {
+                "title": f"机构评级汇总：买入 {buy} / 持有 {hold} / 卖出 {sell}",
+                "date": str(raw.get("period") or "")[:10],
+                "organization": "Finnhub 汇总",
+                "researcher": "",
+                "rating": rating,
+                "forecast_pe": None,
+                "url": "",
+            }
+        )
+    return {
+        "available": bool(items),
+        "items": items,
+        "source_name": "Finnhub 机构评级趋势",
+        "source_url": f"https://finnhub.io/stock/{symbol}",
+    }
+
+
 def _fetch_financials(code: str, secu_code: str) -> dict[str, Any]:
     payload = _domestic_json(
         "https://datacenter.eastmoney.com/securities/api/data/v1/get",
@@ -605,6 +719,7 @@ def fetch_research_dossier(quote_code: str, force: bool = False) -> dict[str, An
 
     snapshot = fetch_asset_snapshot(clean)
     a_identity = _a_secu_code(clean)
+    us_symbol = _us_symbol(clean)
     sections: dict[str, Any] = {
         "financials": {"available": False, "message": "当前市场暂未接入该项"},
         "announcements": {"available": False, "items": []},
@@ -630,6 +745,28 @@ def fetch_research_dossier(quote_code: str, force: bool = False) -> dict[str, An
                     sections[key] = future.result()
                 except Exception:
                     sections[key] = {"available": False, "message": "数据源暂不可用"}
+    elif us_symbol and FINNHUB_API_KEY:
+        jobs = {
+            "financials": (_fetch_us_financials, (us_symbol,)),
+            "announcements": (_fetch_us_filings, (us_symbol,)),
+            "reports": (_fetch_us_recommendations, (us_symbol,)),
+        }
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(function, *arguments): key
+                for key, (function, arguments) in jobs.items()
+            }
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    sections[key] = future.result()
+                except Exception:
+                    sections[key] = {"available": False, "message": "美股数据源暂不可用"}
+    elif us_symbol:
+        message = "VPS 配置 FINNHUB_API_KEY 后启用美股财务、SEC申报和机构评级"
+        sections["financials"] = {"available": False, "message": message}
+        sections["announcements"] = {"available": False, "items": [], "message": message}
+        sections["reports"] = {"available": False, "items": [], "message": message}
 
     report_items = sections.get("reports", {}).get("items") or []
     forward_pe_values = [
@@ -642,10 +779,11 @@ def fetch_research_dossier(quote_code: str, force: bool = False) -> dict[str, An
         rating = str(item.get("rating") or "未评级")
         ratings[rating] = ratings.get(rating, 0) + 1
     snapshot_ready = snapshot.get("status") == "success"
+    us_metrics = sections.get("financials", {}).get("metrics") or {}
     sections["valuation"] = {
-        "available": snapshot_ready,
-        "pe": snapshot.get("pe"),
-        "pb": snapshot.get("pb"),
+        "available": snapshot_ready or bool(us_metrics),
+        "pe": snapshot.get("pe") or us_metrics.get("pe"),
+        "pb": snapshot.get("pb") or us_metrics.get("pb"),
         "forward_pe": (
             round(sum(forward_pe_values) / len(forward_pe_values), 2)
             if forward_pe_values
@@ -654,7 +792,11 @@ def fetch_research_dossier(quote_code: str, force: bool = False) -> dict[str, An
         "report_count": len(report_items),
         "ratings": ratings,
         "history_percentile": None,
-        "message": "历史估值分位待日线样本积累后启用",
+        "message": (
+            "美股估值来自 Finnhub；历史分位待样本积累后启用"
+            if us_symbol and FINNHUB_API_KEY
+            else "历史估值分位待日线样本积累后启用"
+        ),
         "source_name": snapshot.get("source") or "公开行情数据",
         "source_url": sections.get("reports", {}).get("source_url", ""),
     }
@@ -663,7 +805,11 @@ def fetch_research_dossier(quote_code: str, force: bool = False) -> dict[str, An
     dossier = {
         "status": "success" if snapshot.get("status") == "success" else "partial",
         "updated_at": _now(),
-        "market_scope": "A股完整底稿" if a_identity else "跨市场基础底稿",
+        "market_scope": (
+            "A股完整底稿"
+            if a_identity
+            else "美股增强底稿" if us_symbol and FINNHUB_API_KEY else "跨市场基础底稿"
+        ),
         "snapshot": snapshot,
         **sections,
         "completeness": {

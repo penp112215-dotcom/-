@@ -31,9 +31,13 @@ class FeedSource:
     channel: str
     name: str
     url: str
+    tier: str = "secondary"
 
 
 FEEDS = (
+    FeedSource("technology", "Apple Newsroom", "https://www.apple.com/newsroom/rss-feed.rss", "first_party"),
+    FeedSource("technology", "Microsoft 官方博客", "https://blogs.microsoft.com/feed/", "first_party"),
+    FeedSource("technology", "NVIDIA Newsroom", "https://nvidianews.nvidia.com/rss.xml", "first_party"),
     FeedSource("technology", "36氪", "https://36kr.com/feed"),
     FeedSource("technology", "IT之家", "https://www.ithome.com/rss/"),
     FeedSource("technology", "Solidot", "https://www.solidot.org/index.rss"),
@@ -41,10 +45,15 @@ FEEDS = (
     FeedSource("ai", "36氪 AI筛选", "https://36kr.com/feed"),
     FeedSource("ai", "IT之家 AI筛选", "https://www.ithome.com/rss/"),
     FeedSource("ai", "AI中文新闻聚合", _google_url("大模型 OR OpenAI OR Anthropic OR DeepMind OR 生成式AI OR AI智能体")),
-    FeedSource("ai", "OpenAI 官方", "https://openai.com/news/rss.xml"),
-    FeedSource("ai", "Google DeepMind", "https://deepmind.google/blog/rss.xml"),
+    FeedSource("ai", "OpenAI 官方", "https://openai.com/news/rss.xml", "first_party"),
+    FeedSource("ai", "Google DeepMind", "https://deepmind.google/blog/rss.xml", "first_party"),
+    FeedSource("ai", "Google AI 官方", "https://blog.google/technology/ai/rss/", "first_party"),
+    FeedSource("ai", "NVIDIA Newsroom AI筛选", "https://nvidianews.nvidia.com/rss.xml", "first_party"),
     FeedSource("politics", "政治新闻聚合", _google_url("国际政治 OR 外交 OR 地缘政治 OR 国际关系")),
     FeedSource("politics", "BBC 中文", "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml"),
+    FeedSource("politics", "联合国新闻", "https://news.un.org/feed/subscribe/en/news/all/rss.xml", "first_party"),
+    FeedSource("politics", "美国国务院", "https://www.state.gov/rss-feed/press-releases/feed/", "first_party"),
+    FeedSource("politics", "欧盟新闻发布", "https://ec.europa.eu/commission/presscorner/api/rss?language=en", "first_party"),
     FeedSource("politics", "中国新闻网国际", "https://www.chinanews.com.cn/rss/world.xml"),
     FeedSource("politics", "人民网国际", "http://www.people.com.cn/rss/world.xml"),
 )
@@ -67,6 +76,10 @@ FAST_FEEDS = tuple(
     }
 )
 
+# 所有跨境源并行、短超时抓取；任意一个慢源最多拖延约 4 秒，而不是逐个累加。
+# 这样冷启动也能尝试一手来源，失败时仍由 FAST_FEEDS 中的国内源补位。
+REQUEST_FEEDS = FEEDS
+
 CHANNELS = (
     {"key": "technology", "name": "科技", "description": "芯片、硬件、互联网与前沿产品"},
     {"key": "ai", "name": "AI", "description": "模型、研究、产品与产业动态"},
@@ -75,6 +88,7 @@ CHANNELS = (
 
 _cache: tuple[float, dict[str, Any]] | None = None
 _cache_lock = threading.Lock()
+_translation_cache: dict[str, str] = {}
 
 
 def _fetch_bytes(url: str) -> bytes:
@@ -161,6 +175,7 @@ def parse_feed(content: bytes, feed: FeedSource) -> list[dict[str, Any]]:
                 "url": link.strip(),
                 "source": _source_from_item(entry, feed.name),
                 "feed_name": feed.name,
+                "source_tier": feed.tier,
                 "published_at": published_raw,
                 "timestamp": _timestamp(published_raw),
             }
@@ -204,6 +219,69 @@ def _time_text(timestamp: int) -> str:
     return local.strftime("%m-%d %H:%M")
 
 
+def _has_chinese(value: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", value or ""))
+
+
+def _translate_titles(items: list[dict[str, Any]]) -> None:
+    """批量把一手英文标题译成中文；翻译失败时保留原文，绝不伪造摘要。"""
+    pending = [
+        item for item in items
+        if item.get("title") and not _has_chinese(str(item["title"]))
+    ]
+    missing = list(dict.fromkeys(
+        str(item["title"])
+        for item in pending
+        if str(item["title"]) not in _translation_cache
+    ))
+
+    def translate_batch(originals: list[str]) -> dict[str, str]:
+        marker = "\n998877665544332211\n"
+        translated_rows: dict[str, str] = {}
+        try:
+            response = requests.get(
+                "https://translate.googleapis.com/translate_a/single",
+                params={
+                    "client": "gtx",
+                    "sl": "auto",
+                    "tl": "zh-CN",
+                    "dt": "t",
+                    "q": marker.join(originals),
+                },
+                headers=HEADERS,
+                timeout=(2, 4),
+            )
+            translated_text = "".join(
+                str(part[0] or "")
+                for part in (response.json()[0] or [])
+                if isinstance(part, list) and part
+            )
+            translated = [part.strip() for part in translated_text.split(marker.strip())]
+            if len(translated) == len(originals):
+                for original, value in zip(originals, translated):
+                    if _has_chinese(value):
+                        translated_rows[original] = value
+        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
+            pass
+        return translated_rows
+
+    batches = [missing[start : start + 8] for start in range(0, len(missing), 8)]
+    if batches:
+        with ThreadPoolExecutor(max_workers=min(4, len(batches))) as executor:
+            futures = [executor.submit(translate_batch, batch) for batch in batches]
+            for future in as_completed(futures):
+                _translation_cache.update(future.result())
+
+    for item in pending:
+        original = str(item["title"])
+        translated = _translation_cache.get(original)
+        if translated:
+            item["original_title"] = original
+            item["title"] = translated
+    if len(_translation_cache) > 2000:
+        _translation_cache.clear()
+
+
 def fetch_daily_news(force: bool = False) -> dict[str, Any]:
     global _cache
     if not force:
@@ -213,8 +291,8 @@ def fetch_daily_news(force: bool = False) -> dict[str, Any]:
 
     collected: dict[str, list[dict[str, Any]]] = {item["key"]: [] for item in CHANNELS}
     source_status: list[dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=len(FAST_FEEDS)) as executor:
-        futures = [executor.submit(_fetch_feed, feed) for feed in FAST_FEEDS]
+    with ThreadPoolExecutor(max_workers=min(16, len(REQUEST_FEEDS))) as executor:
+        futures = [executor.submit(_fetch_feed, feed) for feed in REQUEST_FEEDS]
         for future in as_completed(futures):
             try:
                 feed, items = future.result()
@@ -244,6 +322,10 @@ def fetch_daily_news(force: bool = False) -> dict[str, Any]:
             if len(items) >= 15:
                 break
         output[channel] = items
+
+    _translate_titles(
+        [item for channel_items in output.values() for item in channel_items]
+    )
 
     channel_rows = []
     for meta in CHANNELS:

@@ -72,9 +72,12 @@ AI_BASE_URL=
 AI_API_KEY=
 AI_MODEL=
 AI_TIMEOUT=120
+FINNHUB_API_KEY=
 ```
 
-将来配置 API Key 时只修改 VPS 的 `/etc/miniapp-api.env`，绝不能写入小程序源码或 Git。
+`FINNHUB_API_KEY` 用于美股公司新闻、财务指标、SEC 申报和分析师评级。没有配置时程序仍可运行，但只显示基础行情和备用新闻。
+
+将来配置任何 API Key 时只修改 VPS 的 `/etc/miniapp-api.env`，绝不能写入小程序源码或 Git。
 
 ## 5. 安装 systemd 常驻服务
 

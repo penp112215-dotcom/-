@@ -71,6 +71,7 @@ function toDisplay(item) {
         trendText: trend == null ? '积累中' : percent(trend, true),
         trendCls: Number(trend || 0) > 0 ? 'trend trend-up' : 'trend',
         grossText: Number(item.gross_premium_pct || 0).toFixed(2) + '%',
+        feeAdjustedText: Number(item.fee_adjusted_edge_pct || 0).toFixed(2) + '%',
         netText: (positive ? '+' : '') + Number(item.net_edge_pct || 0).toFixed(2) + '%',
         perInvestorText: money(Number(item.per_investor_limit || 0)),
         capacityText: money(Number(item.total_capacity || 0)),
@@ -144,7 +145,11 @@ Page({
             const account = res.account || EMPTY_ACCOUNT;
             const allItems = (res.items || [])
                 .map(toDisplay)
-                .sort((a, b) => b.net_edge_pct - a.net_edge_pct);
+                .sort((a, b) => {
+                const aOpen = ['open', 'restricted'].includes(a.subscription_state) ? 1 : 0;
+                const bOpen = ['open', 'restricted'].includes(b.subscription_state) ? 1 : 0;
+                return bOpen - aOpen || b.net_edge_pct - a.net_edge_pct;
+            });
             const activeFilter = this.data.activeFilter;
             const items = filterItems(allItems, activeFilter);
             this.setData({

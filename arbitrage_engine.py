@@ -11,6 +11,7 @@ import datetime as dt
 import json
 import math
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -334,6 +335,17 @@ def _safe_get_bytes(url: str, params: dict[str, Any] | None = None) -> bytes | N
     return None
 
 
+def _safe_get_text(url: str, params: dict[str, Any] | None = None) -> str:
+    """获取文本接口；仅返回成功响应，避免把错误页当成基金数据。"""
+    content = _safe_get_bytes(url, params=params)
+    if not content:
+        return ""
+    try:
+        return content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return content.decode("gb18030", errors="replace")
+
+
 def _to_float(value: Any) -> float | None:
     if value in (None, "", "--", "-"):
         return None
@@ -604,24 +616,102 @@ def fetch_fund_basic(code: str) -> dict:
         },
     )
     raw = (payload or {}).get("Datas") or {}
+    max_subscription = _to_float(raw.get("MAXSG"))
+    subscription_status = str(raw.get("SGZT") or "未知")
     data = {
         "fund_type": str(raw.get("FTYPE") or "LOF"),
-        "subscription_status": str(raw.get("SGZT") or "未知"),
+        "subscription_status": subscription_status,
         "redemption_status": str(raw.get("SHZT") or "未知"),
         "source_rate": _parse_percent(raw.get("SOURCERATE")),
         "display_rate": _parse_percent(raw.get("RATE")),
         "min_subscription": _to_float(raw.get("MINSG")),
-        "max_subscription": _to_float(raw.get("MAXSG")),
+        "max_subscription": max_subscription,
+        # MAXSG 是单基金详情中的最高申购金额；164701 当前公开值即为 500。
+        "limit_confirmed": bool(
+            max_subscription
+            and max_subscription > 0
+            and any(word in subscription_status for word in ("开放", "限大额", "限制"))
+        ),
+        "limit_source": "天天基金单基金详情（MAXSG）",
         "exchange": str(raw.get("LISTTEXCHMARK") or ""),
         "is_listed": str(raw.get("ISLISTTRADE") or "") == "1",
     }
     return _cache_set(cache_key, data)
 
 
-def _fetch_candidate_details(codes: list[str]) -> dict[str, dict]:
+def fetch_fund_purchase_map() -> dict[str, dict[str, Any]]:
+    """批量取得申购状态和“日累计限定金额”。
+
+    天天基金的申购状态列表与单基金移动端摘要并不是同一口径。后者经常只给
+    ``限大额``，却遗漏 50/500/5000 元等真正影响套利容量的日累计限额。
+    """
+    cached = _cache_get("fund:purchase-map", ttl=600)
+    if cached is not None:
+        return cached
+    text = _safe_get_text(
+        "https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx",
+        params={"t": "8", "page": "1,50000", "js": "reData", "sort": "fcode,asc"},
+    )
+    if not text:
+        return {}
+    # 该接口历史上使用过 ``allRecords``，当前返回字段为 ``record``；
+    # 只截取 datas 数组，不依赖后续元数据字段的固定命名。
+    match = re.search(
+        r'["\']?datas["\']?\s*:\s*(\[\[.*?\]\])\s*,\s*'
+        r'["\']?(?:record|allRecords|pages)["\']?\s*:',
+        text,
+        re.S,
+    )
+    if not match:
+        return {}
+    try:
+        rows = json.loads(match.group(1))
+    except (json.JSONDecodeError, ValueError):
+        return {}
+
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, list) or len(row) < 10:
+            continue
+        code = str(row[0] or "").strip()
+        if not re.fullmatch(r"\d{6}", code):
+            continue
+        daily_limit = _to_float(row[9])
+        result[code] = {
+            "name": str(row[1] or code),
+            "fund_type": str(row[2] or "LOF"),
+            "official_nav": _to_float(row[3]),
+            "nav_date": str(row[4] or ""),
+            "subscription_status": str(row[5] or "未知"),
+            "redemption_status": str(row[6] or "未知"),
+            "next_open_date": str(row[7] or ""),
+            "min_subscription": _to_float(row[8]),
+            "max_subscription": daily_limit,
+            "source_rate": _parse_percent(row[12]) if len(row) > 12 else None,
+            "limit_confirmed": daily_limit is not None and daily_limit > 0,
+            "limit_source": "天天基金申购状态（日累计限定金额）",
+            "is_listed": True,
+        }
+    return _cache_set("fund:purchase-map", result)
+
+
+def _fetch_candidate_details(
+    codes: list[str], purchase_map: dict[str, dict[str, Any]] | None = None
+) -> dict[str, dict]:
     result: dict[str, dict] = {}
+    purchase_map = purchase_map or {}
+    missing_codes = []
+    for code in codes:
+        if code in purchase_map:
+            result[code] = dict(purchase_map[code])
+        else:
+            missing_codes.append(code)
+    if not missing_codes:
+        return result
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(fetch_fund_basic, code): code for code in codes}
+        futures = {
+            executor.submit(fetch_fund_basic, code): code for code in missing_codes
+        }
         for future in as_completed(futures):
             code = futures[future]
             try:
@@ -634,12 +724,15 @@ def _fetch_candidate_details(codes: list[str]) -> dict[str, dict]:
 def _limit_scope_and_capacity(
     max_subscription: float | None,
     subscription_status: str,
+    *,
+    limit_confirmed: bool = False,
+    limit_source: str = "",
 ) -> dict[str, Any]:
     """公开接口未给出公告限额口径时，按“每名投资者”保守计算。"""
     status_text = subscription_status.strip()
     if any(word in status_text for word in ("暂停", "关闭", "封闭")):
         normalized_status = "suspended"
-    elif any(word in status_text for word in ("限额", "限制")):
+    elif any(word in status_text for word in ("限额", "限制", "限大额", "大额申购")):
         normalized_status = "restricted"
     elif "开放申购" in status_text or status_text == "开放":
         normalized_status = "open"
@@ -661,7 +754,11 @@ def _limit_scope_and_capacity(
         limit_scope = "未披露，按资金上限"
     else:
         per_investor = min(max_subscription, ACCOUNT_CAPACITY.cash_per_investor)
-        limit_scope = "公开平台参考，按单个投资者保守计算"
+        limit_scope = (
+            f"{limit_source}，按每名投资者计算"
+            if limit_source
+            else "公开平台参考，按每名投资者保守计算"
+        )
 
     return {
         "limit_scope": limit_scope,
@@ -674,8 +771,8 @@ def _limit_scope_and_capacity(
             2,
         ),
         "eligible_channels": ACCOUNT_CAPACITY.total_channels,
-        # 正式执行前仍需用基金公告或银河证券页面确认。
-        "limit_confirmed": False,
+        # 有明确“日累计限定金额”时可作为高可信筛选值；执行前仍以银河页面为准。
+        "limit_confirmed": bool(limit_confirmed and max_subscription and max_subscription > 0),
         "normalized_status": normalized_status,
     }
 
@@ -709,17 +806,21 @@ def _assess_item(quote: dict, nav: dict, basic: dict) -> dict | None:
         else DEFAULT_SOURCE_SUBSCRIPTION_RATE * SUBSCRIPTION_FEE_DISCOUNT
     )
     safety_buffer = _risk_buffer(fund_type, name, nav_is_estimate)
-    net_edge = (
-        gross_premium
-        - subscription_fee_rate
-        - SELL_COMMISSION_RATE
-        - DEFAULT_SLIPPAGE_RATE
-        - safety_buffer
+    # 按现金流精确计算费后理论空间，避免简单相减在高溢价时产生系统偏差：
+    # 申购份额 = 本金 / [NAV * (1 + 申购费)]；卖出到账再扣佣金和滑点。
+    fee_adjusted_edge = (
+        (exit_price / reference_nav)
+        * (1 - SELL_COMMISSION_RATE - DEFAULT_SLIPPAGE_RATE)
+        / (1 + subscription_fee_rate)
+        - 1
     )
+    net_edge = fee_adjusted_edge - safety_buffer
 
     capacity = _limit_scope_and_capacity(
         basic.get("max_subscription"),
         str(basic.get("subscription_status") or "未知"),
+        limit_confirmed=bool(basic.get("limit_confirmed")),
+        limit_source=str(basic.get("limit_source") or ""),
     )
     published_capacity = float(capacity["total_capacity"])
     turnover = float(quote.get("amount") or 0.0)
@@ -784,6 +885,7 @@ def _assess_item(quote: dict, nav: dict, basic: dict) -> dict | None:
         "nav_label": nav_label,
         "nav_date": nav.get("estimate_time") or nav.get("nav_date") or "",
         "gross_premium_pct": round(gross_premium * 100, 3),
+        "fee_adjusted_edge_pct": round(fee_adjusted_edge * 100, 3),
         "subscription_fee_pct": round(subscription_fee_rate * 100, 3),
         "sell_fee_pct": round(SELL_COMMISSION_RATE * 100, 3),
         "slippage_pct": round(DEFAULT_SLIPPAGE_RATE * 100, 3),
@@ -801,6 +903,7 @@ def _assess_item(quote: dict, nav: dict, basic: dict) -> dict | None:
         "eligible_channels": capacity["eligible_channels"],
         "limit_scope": capacity["limit_scope"],
         "limit_confirmed": capacity["limit_confirmed"],
+        "limit_source": str(basic.get("limit_source") or ""),
         "expected_profit": round(expected_profit, 2),
         "data_confidence": data_confidence,
         "signal": signal,
@@ -844,6 +947,7 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
         }
 
     nav_map = fetch_fund_nav_batch([item["code"] for item in quotes])
+    purchase_map = fetch_fund_purchase_map()
     rough_candidates = []
     for quote in quotes:
         nav = nav_map.get(quote["code"]) or {}
@@ -853,16 +957,24 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
         if not reference_nav:
             continue
         rough_premium = quote["price"] / reference_nav - 1
-        rough_candidates.append((rough_premium, quote))
+        purchase_row = purchase_map.get(quote["code"]) or {}
+        purchase_state = _limit_scope_and_capacity(
+            purchase_row.get("max_subscription"),
+            str(purchase_row.get("subscription_status") or "未知"),
+        )["normalized_status"]
+        purchase_rank = 2 if purchase_state in {"open", "restricted"} else 1 if purchase_state == "unknown" else 0
+        rough_candidates.append((purchase_rank, rough_premium, quote))
 
     rough_candidates.sort(
-        key=lambda row: (row[0], float(row[1].get("amount") or 0.0)),
+        key=lambda row: (row[0], row[1], float(row[2].get("amount") or 0.0)),
         reverse=True,
     )
     detail_quotes = _merge_order_book(
-        [row[1] for row in rough_candidates[:DETAIL_CANDIDATE_COUNT]]
+        [row[2] for row in rough_candidates[:DETAIL_CANDIDATE_COUNT]]
     )
-    details = _fetch_candidate_details([item["code"] for item in detail_quotes])
+    details = _fetch_candidate_details(
+        [item["code"] for item in detail_quotes], purchase_map
+    )
     history_context = _load_history_context(
         [item["code"] for item in detail_quotes]
     )
@@ -900,6 +1012,7 @@ def build_arbitrage_snapshot() -> dict[str, Any]:
     }
     items.sort(
         key=lambda item: (
+            item["subscription_state"] in {"open", "restricted"},
             signal_priority.get(item["signal"], 0),
             item["net_edge_pct"],
             item["amount"],

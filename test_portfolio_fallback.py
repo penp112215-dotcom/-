@@ -62,6 +62,20 @@ class PortfolioFallbackTest(unittest.TestCase):
         self.assertEqual(result["news"], fallback_news)
         self.assertIsNone(result["price"])
 
+    def test_finnhub_news_is_preferred_and_merged(self):
+        official = [{"title": "微软发布财报", "url": "https://official.example/1"}]
+        yahoo = [{"title": "分析师解读", "url": "https://news.example/2"}]
+        with (
+            patch.object(main, "_fetch_yahoo_quote", return_value=None),
+            patch.object(main, "_fetch_tencent_quote", return_value=None),
+            patch.object(main, "_fetch_eastmoney_quote", return_value=None),
+            patch.object(main, "_fetch_finnhub_news", return_value=official),
+            patch.object(main, "_fetch_yahoo_news", return_value=yahoo),
+            patch.object(main, "_fetch_bing_chinese_news", return_value=[]),
+        ):
+            result = main._build_portfolio_stock("MSFT")
+        self.assertEqual(result["news"], official + yahoo)
+
 
 if __name__ == "__main__":
     unittest.main()
