@@ -76,6 +76,13 @@ class PortfolioFallbackTest(unittest.TestCase):
             result = main._build_portfolio_stock("MSFT")
         self.assertEqual(result["news"], official + yahoo)
 
+    def test_translation_failure_keeps_original_news_title(self):
+        title = "Microsoft announces a new cloud investment"
+        main._TRANSLATION_CACHE.pop(title, None)
+        with patch.object(main, "_safe_get", return_value=None):
+            result = main._translate_news_titles([title])
+        self.assertEqual(result, [title])
+
 
 if __name__ == "__main__":
     unittest.main()

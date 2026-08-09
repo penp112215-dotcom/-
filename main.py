@@ -335,7 +335,7 @@ def _has_chinese(text: str) -> bool:
 
 
 def _translate_news_title(title: str) -> str:
-    """把英文财经标题转换成中文；失败时返回空串，前端不展示英文兜底。"""
+    """把英文财经标题转换成中文；所有翻译源失败时保留原题。"""
     title = str(title or "").strip()
     if not title:
         return ""
@@ -356,18 +356,38 @@ def _translate_news_title(title: str) -> str:
             "q": title,
         },
     )
-    if not resp:
-        return ""
-    try:
-        translated = "".join(
-            str(part[0] or "")
-            for part in (resp.json()[0] or [])
-            if isinstance(part, list) and part
-        ).strip()
-    except (ValueError, KeyError, IndexError, TypeError):
-        return ""
+    translated = ""
+    if resp:
+        try:
+            translated = "".join(
+                str(part[0] or "")
+                for part in (resp.json()[0] or [])
+                if isinstance(part, list) and part
+            ).strip()
+        except (ValueError, KeyError, IndexError, TypeError):
+            translated = ""
+
+    # 广州 VPS 可能无法访问 Google 翻译，使用 MyMemory 官方 REST API 降级。
     if not _has_chinese(translated):
-        return ""
+        memory_resp = _safe_get(
+            "https://api.mymemory.translated.net/get",
+            headers=_YAHOO_HEADERS,
+            timeout=5,
+            params={"q": title[:480], "langpair": "en|zh-CN", "mt": 1},
+        )
+        if memory_resp:
+            try:
+                translated = str(
+                    (memory_resp.json().get("responseData") or {}).get(
+                        "translatedText"
+                    )
+                    or ""
+                ).strip()
+            except (ValueError, AttributeError, TypeError):
+                translated = ""
+
+    if not _has_chinese(translated):
+        return title
     if len(_TRANSLATION_CACHE) >= 1000:
         _TRANSLATION_CACHE.clear()
     _TRANSLATION_CACHE[title] = translated
@@ -420,13 +440,16 @@ def _translate_news_titles(titles: list[str]) -> list[str]:
             translated_parts = []
 
     if len(translated_parts) != len(missing_titles):
-        translated_parts = [_translate_news_title(title) for title in missing_titles]
+        # 单条翻译并发执行，避免某个境外翻译源超时导致 10 条新闻依次等待。
+        with ThreadPoolExecutor(max_workers=min(6, len(missing_titles))) as pool:
+            translated_parts = list(pool.map(_translate_news_title, missing_titles))
 
     for index, original, translated in zip(
         missing_indexes, missing_titles, translated_parts
     ):
-        if _has_chinese(translated):
-            results[index] = translated
+        clean_translation = str(translated or "").strip()
+        results[index] = clean_translation or original
+        if _has_chinese(clean_translation):
             _TRANSLATION_CACHE[original] = translated
     if len(_TRANSLATION_CACHE) >= 1000:
         _TRANSLATION_CACHE.clear()
