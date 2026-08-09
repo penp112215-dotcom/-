@@ -5,6 +5,9 @@ interface NewsItem {
   summary: string
   url: string
   source: string
+  feedName: string
+  sourceTierText: string
+  translated: boolean
   time: string
   date: string
   expanded: boolean
@@ -26,6 +29,9 @@ function displayItems(items: Record<string, any>[]): NewsItem[] {
     summary: String(item.summary || ''),
     url: String(item.url || ''),
     source: String(item.source || '来源未知'),
+    feedName: String(item.feed_name || ''),
+    sourceTierText: item.source_tier === 'first_party' ? '官方一手' : '媒体/聚合',
+    translated: item.translation_status === 'translated',
     time: String(item.time || item.date || '时间未知'),
     date: String(item.date || ''),
     expanded: false,

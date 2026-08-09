@@ -225,6 +225,10 @@ def _has_chinese(value: str) -> bool:
 
 def _translate_titles(items: list[dict[str, Any]]) -> None:
     """批量把一手英文标题译成中文；翻译失败时保留原文，绝不伪造摘要。"""
+    for item in items:
+        item["translation_status"] = (
+            "original_zh" if _has_chinese(str(item.get("title") or "")) else "untranslated"
+        )
     pending = [
         item for item in items
         if item.get("title") and not _has_chinese(str(item["title"]))
@@ -265,6 +269,25 @@ def _translate_titles(items: list[dict[str, Any]]) -> None:
             pass
         return translated_rows
 
+    def translate_single_fallback(original: str) -> tuple[str, str]:
+        """Google 不可达时使用 MyMemory 官方 REST API 翻译单条标题。"""
+        try:
+            response = requests.get(
+                "https://api.mymemory.translated.net/get",
+                params={"q": original[:480], "langpair": "en|zh-CN", "mt": 1},
+                headers=HEADERS,
+                timeout=(2, 5),
+            )
+            translated = str(
+                (response.json().get("responseData") or {}).get("translatedText")
+                or ""
+            ).strip()
+            if _has_chinese(translated):
+                return original, translated
+        except (requests.RequestException, ValueError, AttributeError, TypeError):
+            pass
+        return original, ""
+
     batches = [missing[start : start + 8] for start in range(0, len(missing), 8)]
     if batches:
         with ThreadPoolExecutor(max_workers=min(4, len(batches))) as executor:
@@ -272,12 +295,22 @@ def _translate_titles(items: list[dict[str, Any]]) -> None:
             for future in as_completed(futures):
                 _translation_cache.update(future.result())
 
+    remaining = [title for title in missing if title not in _translation_cache]
+    if remaining:
+        with ThreadPoolExecutor(max_workers=min(6, len(remaining))) as executor:
+            futures = [executor.submit(translate_single_fallback, title) for title in remaining]
+            for future in as_completed(futures):
+                original, translated = future.result()
+                if translated:
+                    _translation_cache[original] = translated
+
     for item in pending:
         original = str(item["title"])
+        item["original_title"] = original
         translated = _translation_cache.get(original)
         if translated:
-            item["original_title"] = original
             item["title"] = translated
+            item["translation_status"] = "translated"
     if len(_translation_cache) > 2000:
         _translation_cache.clear()
 

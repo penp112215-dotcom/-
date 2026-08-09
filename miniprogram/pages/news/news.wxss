@@ -15,11 +15,15 @@ page { background: #f4f6fa; color: #172033; }
 .channel-head { margin: 28rpx 3rpx 14rpx; }.channel-title { display: block; font-size: 27rpx; font-weight: 820; }.channel-description { display: block; margin-top: 5rpx; color: #8a94a4; font-size: 16rpx; }
 .news-card { margin-bottom: 13rpx; padding: 21rpx; border: 1rpx solid #e2e6ed; border-radius: 17rpx; background: #fff; box-shadow: 0 5rpx 18rpx rgba(26,39,61,.035); }
 .news-meta,.card-actions { display: flex; justify-content: space-between; align-items: center; }
+.source-wrap { display: flex; min-width: 0; align-items: center; gap: 8rpx; }
 .source-tag { max-width: 70%; overflow: hidden; color: #2f72dc; font-size: 16rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }.news-time { color: #9ba4b2; font-size: 15rpx; }
+.tier-tag,.translated-tag { flex: none; padding: 3rpx 7rpx; border-radius: 7rpx; background: #edf2f8; color: #778499; font-size: 12rpx; }
+.translated-tag { background: #edf8f1; color: #27814d; }
 .news-title { display: block; margin-top: 13rpx; color: #253146; font-size: 22rpx; font-weight: 700; line-height: 1.55; }
 .news-summary { display: block; margin-top: 13rpx; padding: 14rpx; border-radius: 10rpx; background: #f6f8fb; color: #667286; font-size: 18rpx; line-height: 1.55; }
 .card-actions { justify-content: flex-end; gap: 25rpx; margin-top: 15rpx; padding-top: 13rpx; border-top: 1rpx solid #eef1f5; }
 .summary-action { color: #778499; font-size: 16rpx; }.source-action { color: #2f72dc; font-size: 16rpx; font-weight: 700; }
+.feed-route { margin-right: auto; max-width: 42%; overflow: hidden; color: #9aa4b2; font-size: 13rpx; text-overflow: ellipsis; white-space: nowrap; }
 .state { padding: 70rpx 20rpx; color: #8d97a6; font-size: 20rpx; text-align: center; }.state-error { color: #cf5959; }
 .disclaimer { display: block; margin-top: 24rpx; padding: 0 16rpx; color: #9ba4b0; font-size: 15rpx; line-height: 1.55; text-align: center; }
 .footer-space { height: 45rpx; }
