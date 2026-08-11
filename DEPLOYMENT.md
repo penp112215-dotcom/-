@@ -41,7 +41,7 @@ sudo adduser --system --group --home /opt/miniapp miniapp
 公开仓库：
 
 ```bash
-sudo git clone https://github.com/penp112215-dotcom/-.git /opt/miniapp
+sudo git clone https://github.com/penp112215-dotcom/market-radar-miniapp.git /opt/miniapp
 ```
 
 如果仓库是私有仓库，请在 VPS 配置只读 Deploy Key，再用 SSH 地址克隆。不要把 GitHub

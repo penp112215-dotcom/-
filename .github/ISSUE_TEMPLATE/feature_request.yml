@@ -1,0 +1,36 @@
+name: 功能建议
+description: 提议新的数据源、功能或维护改进
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: 要解决的问题
+      description: 请先描述用户问题，而不只是具体实现。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+    validations:
+      required: true
+  - type: textarea
+    id: data_source
+    attributes:
+      label: 数据来源和许可
+      description: 涉及外部数据时，请附官方链接、许可/条款、频率限制和可达性信息。
+  - type: textarea
+    id: fallback
+    attributes:
+      label: 失败与降级策略
+      description: 数据源超时、限流或缺字段时，页面应该如何表现？
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 范围确认
+      options:
+        - label: 建议不包含自动下单、绕过访问控制或确定性收益承诺。
+          required: true
+

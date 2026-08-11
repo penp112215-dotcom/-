@@ -43,7 +43,7 @@
 ### 版本管理
 
 - 本地 Git 仓库分支：`main`。
-- GitHub：`penp112215-dotcom/-`。
+- GitHub：`penp112215-dotcom/market-radar-miniapp`。
 - VPS 使用只读 Deploy Key，通过 `ssh.github.com:443` 拉取代码，避免使用个人密码或 PAT。
 
 ## 3. 当前最终架构
@@ -238,8 +238,8 @@ sudo tar -czf /root/miniapp-data-$(date +%F).tar.gz /opt/miniapp/data
 - CloudBase AnyService 已打通开发工具和手机访问。
 - 美股行情具备 Yahoo、腾讯财经、东方财富降级。
 - 前沿资讯超时已修复。
-- 当前自动测试共 19 项，全部通过。
-- 最新稳定提交：`1c6802c`。
+- 当前自动测试共 27 项，全部通过。
+- 稳定版本以 `main` 分支最新通过自动测试的提交为准。
 
 ## 10. 下一阶段建议
 
@@ -264,4 +264,4 @@ sudo tar -czf /root/miniapp-data-$(date +%F).tar.gz /opt/miniapp/data
 
 ## 12. 后续任务上下文摘要
 
-项目位于 `D:\Documents\小程序`，GitHub 为 `penp112215-dotcom/-`，当前分支 `main`，稳定提交 `1c6802c`。后端部署在腾讯云广州 VPS `1.14.200.232`，systemd 服务 `miniapp-api`，Uvicorn 监听 `127.0.0.1:8000`，AnyService Nginx 入口为 `8080`。小程序通过 CloudBase 环境 `cloud1-d7gdt868jed18e21e`、服务标识 `miniappvps` 调用 VPS，不再依赖未备案域名 `api.penp15.cn`。五个模块为基金套利、美股持仓、前沿资讯、市场情绪、AI投研。行情回退顺序 Yahoo→腾讯财经→东方财富；新闻首屏使用大陆快速 RSS；19 项测试通过。项目定位为个人自用体验版，不公开发布。下一优先任务是 OpenID 白名单、备份告警和稳定美股新闻 API。
+项目位于 `D:\Documents\小程序`，当前分支为 `main`。后端通过 systemd 运行 FastAPI，Uvicorn 仅监听本机端口，再由 Nginx 和 CloudBase AnyService 转发。五个模块为基金价差、美股持仓、前沿资讯、市场情绪和 AI 投研；行情与新闻均包含多源降级。当前 27 项自动测试全部通过。公开复用时应替换文档和配置中的个人环境标识、服务器地址与域名。下一优先任务是访问控制、备份告警、数据来源健康检查和稳定美股新闻 API。
