@@ -1,5 +1,6 @@
 """
-轻量级数据引擎 —— 为微信小程序提供 A股套利 / 美股持仓 / 资讯聚合 三个数据接口。
+轻量级数据引擎 —— 为微信小程序提供基金价差、美股持仓、资讯聚合、
+市场情绪和跨市场研究接口。
 
 设计原则：
 1. 每个接口都尝试抓取真实数据（新浪行情、天天金估值、东方财富、币安合约）。
@@ -76,9 +77,9 @@ FALLBACK_CRYPTO = {
 FALLBACK_FEAR_GREED = {"value": 50, "classification": "Neutral", "updated_at": "unavailable"}
 
 app = FastAPI(
-    title="小程序数据引擎",
-    version="0.1.0",
-    description="A股套利 / 美股持仓 / 资讯聚合",
+    title="Market Radar Mini Program API",
+    version="0.2.0",
+    description="基金价差 / 美股持仓 / 资讯聚合 / 市场情绪 / 跨市场研究",
 )
 
 # 跨域：开发期放开所有源，便于本地小程序模拟器直接请求
@@ -898,7 +899,7 @@ def get_all_news(force: bool = False) -> dict[str, Any]:
 def root() -> dict[str, Any]:
     return {
         "service": "小程序数据引擎",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "endpoints": [
             "/api/arbitrage",
             "/api/arbitrage/history/{code}",

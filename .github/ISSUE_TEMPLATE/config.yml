@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密安全报告
+    url: https://github.com/penp112215-dotcom/market-radar-miniapp/security/advisories/new
+    about: 漏洞、密钥泄露或可利用细节请使用私密渠道，不要创建公开 Issue。

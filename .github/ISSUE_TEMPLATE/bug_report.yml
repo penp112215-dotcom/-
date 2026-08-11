@@ -1,0 +1,60 @@
+name: Bug 报告
+description: 报告可复现的程序、接口或数据展示问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请删除截图中的 API Key、服务器地址、账号信息和个人投资数据。
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响模块
+      options:
+        - 基金价差监控
+        - 美股自选与新闻
+        - 前沿资讯
+        - 市场情绪
+        - AI 投研
+        - 部署或 CloudBase
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？期望结果是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 看到……
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 操作系统、Python/Node 版本、微信开发者工具版本，以及本机/真机/体验版。
+  - type: textarea
+    id: source
+    attributes:
+      label: 数据来源与时间
+      description: 若为数据问题，请提供公开来源链接、观察时间、时区及脱敏后的响应字段。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已搜索现有 Issue。
+          required: true
+        - label: 我没有提交密钥、Cookie、账号或其他敏感信息。
+          required: true
+

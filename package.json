@@ -1,11 +1,25 @@
 {
-  "name": "miniprogram-ts-quickstart",
-  "version": "1.0.0",
-  "description": "",
-  "scripts": {},
-  "keywords": [],
-  "author": "",
-  "license": "",
+  "name": "market-radar-miniapp",
+  "version": "0.2.0",
+  "description": "Self-hosted WeChat mini program for traceable market research and multi-source data monitoring.",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "python -m unittest discover -v"
+  },
+  "keywords": [
+    "wechat-mini-program",
+    "fastapi",
+    "market-data",
+    "news-aggregation",
+    "self-hosted"
+  ],
+  "author": "penp112215-dotcom",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/penp112215-dotcom/market-radar-miniapp.git"
+  },
   "devDependencies": {
     "miniprogram-api-typings": "^2.8.3-1",
     "typescript": "^7.0.2"
